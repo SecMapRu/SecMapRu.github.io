@@ -18,13 +18,13 @@
 
 <!-- Вертикальный тулбар слева -->
 <div id="toolbar">
-  <button class="btn" id="btn-add-host" title="Новый Хост">
+  <button class="btn" id="btn-add-host" title="Новый Хост [H]">
     <span>🖥️</span><span class="btn-text"> Новый Хост</span>
   </button>
-  <button class="btn" id="btn-add-group" title="Новая Группа">
+  <button class="btn" id="btn-add-group" title="Новая Группа [G]">
     <span>🔲</span><span class="btn-text"> Новая Группа</span>
   </button>
-  <button class="btn" id="btn-connect" title="Связать">
+  <button class="btn" id="btn-connect" title="Связать [C]">
     <span>↔️</span><span class="btn-text"> Связать</span>
   </button>
 
@@ -56,9 +56,9 @@
 
   <div class="separator-h"></div>
   <div class="zoom-group">
-    <button class="btn" id="btn-zoom-in" title="Приблизить">➕</button>
-    <button class="btn" id="btn-zoom-reset" title="Сбросить масштаб">100%</button>
-    <button class="btn" id="btn-zoom-out" title="Отдалить">➖</button>
+    <button class="btn" id="btn-zoom-in" title="Приблизить [+]">➕</button>
+    <button class="btn" id="btn-zoom-reset" title="Сбросить масштаб [Ctrl+0]">100%</button>
+    <button class="btn" id="btn-zoom-out" title="Отдалить [-]">➖</button>
   </div>
 
   <div class="separator-h"></div>
@@ -76,18 +76,16 @@
   </button>
 </div>
 
-<!--&lt;!&ndash; Верхний баннер &ndash;&gt;-->
-<!--<div id="banner-top">-->
-<!--  <span>Здесь могла быть ваша реклама</span>-->
-<!--</div>-->
-
-<!-- Правый баннер -->
-<!--<div id="banner-right">-->
-<!--  <span>Здесь могла быть ваша реклама</span>-->
-<!--</div>-->
+<header id="top-info-banner">
+  <span class="top-info-tag">SecMap</span>
+  <p class="top-info-text">
+    Инструмент, позволяющий быстро и просто отрисовать схему потоков данных и выгрузить ее в популярные форматы, либо просто поделиться с коллегами, друзьями. Вся работа происходит исключительно в браузере, а на сервер ничего не передается.
+  </p>
+</header>
 
 <!-- Холст -->
 <div id="canvas-container">
+  <div id="selection-box"></div>
   <div id="viewport">
     <div id="groups-container"></div>
     <svg id="edges-layer">
@@ -126,7 +124,7 @@
 </div>
 
 <div id="help-overlay">
-  SecMap - инструмент, позволяющий быстро и просто отрисовать схему потоков данных и выгрузить ее в популярные форматы, либо просто поделиться с коллегами, друзьями.<br>Вся работа происходит исключительно в браузере, а на сервер ничего не передается.
+  Выделение рамкой с зажатым <code>Shift</code> или клик с <code>Ctrl/Shift</code>.<br>Горячие клавиши: <code>Del/Backspace</code> — удалить, <code>Ctrl+A</code> — выбрать всё, <code>Esc</code> — сброс, <code>H</code> — хост, <code>G</code> — группа, <code>C</code> — связь.
 </div>
 
 <script src="assets/main.js"></script>
@@ -144,7 +142,6 @@
 </script>
 <noscript><div><img src="https://mc.yandex.ru/watch/113487236" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
 <!-- /Yandex.Metrika counter -->
-
 
 </body>
 </html>

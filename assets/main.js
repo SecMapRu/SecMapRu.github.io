@@ -5,6 +5,9 @@ const state = {
     groups: [],
     edges: [],
     selected: null,
+    selectedNodes: new Set(),
+    selectedGroups: new Set(),
+    selectedEdges: new Set(),
     isConnecting: false,
     connectSourceId: null,
     scale: 1,
@@ -13,7 +16,9 @@ const state = {
     startPan: { x: 0, y: 0 },
     flowEnabled: true,
     theme: 'light',
-    expandedAggregates: new Set()
+    expandedAggregates: new Set(),
+    isMarqueeSelecting: false,
+    marqueeStart: { x: 0, y: 0 }
 };
 
 const container = document.getElementById('canvas-container');
@@ -24,6 +29,7 @@ const groupsContainer = document.getElementById('groups-container');
 const sidebar = document.getElementById('sidebar');
 const sidebarContent = document.getElementById('sidebar-content');
 const sidebarTitle = document.getElementById('sidebar-title');
+const selectionBox = document.getElementById('selection-box');
 
 const domNodes = new Map();
 const domGroups = new Map();
@@ -96,9 +102,6 @@ function loadSavedState() {
 }
 
 function initDemo() {
-    // ---------------------------------------------------------
-    // 1. ЗОНЫ / ГРУППЫ СЕТИ
-    // ---------------------------------------------------------
     const gExternal = {
         id: uid(),
         parentGroupId: null,
@@ -137,9 +140,6 @@ function initDemo() {
 
     state.groups.push(gExternal, gCorp, gDC);
 
-    // ---------------------------------------------------------
-    // 2. УЗЛЫ / ХОСТЫ
-    // ---------------------------------------------------------
     const nC2 = {
         id: uid(),
         name: 'Attacker C2 Server',
@@ -199,9 +199,6 @@ function initDemo() {
 
     state.nodes.push(nC2, nDropZone, nVictim, nProxy, nDC, nDB);
 
-    // ---------------------------------------------------------
-    // 3. ПОТОКИ ДАННЫХ
-    // ---------------------------------------------------------
     state.edges.push({
         id: uid(),
         from: nVictim.id,
@@ -276,7 +273,22 @@ container.addEventListener('wheel', (e) => {
 }, { passive: false });
 
 container.addEventListener('mousedown', (e) => {
-    if (e.target === container || e.target === viewport || e.target === edgesLayer) {
+    if (e.button !== 0) return;
+    const isTargetCanvas = (e.target === container || e.target === viewport || e.target === edgesLayer);
+
+    // Прямоугольное выделение рамкой (Shift/Ctrl/Meta + ЛКМ по холсту)
+    if (isTargetCanvas && (e.shiftKey || e.ctrlKey || e.metaKey)) {
+        state.isMarqueeSelecting = true;
+        state.marqueeStart = { x: e.clientX, y: e.clientY };
+        selectionBox.style.display = 'block';
+        selectionBox.style.left = (e.clientX - container.offsetLeft) + 'px';
+        selectionBox.style.top = (e.clientY - container.offsetTop) + 'px';
+        selectionBox.style.width = '0px';
+        selectionBox.style.height = '0px';
+        return;
+    }
+
+    if (isTargetCanvas) {
         state.isPanning = true;
         state.startPan = { x: e.clientX - state.pan.x, y: e.clientY - state.pan.y };
         clearSelection();
@@ -284,6 +296,24 @@ container.addEventListener('mousedown', (e) => {
 });
 
 window.addEventListener('mousemove', (e) => {
+    if (state.isMarqueeSelecting) {
+        const curX = e.clientX;
+        const curY = e.clientY;
+        const startX = state.marqueeStart.x;
+        const startY = state.marqueeStart.y;
+
+        const left = Math.min(startX, curX) - container.offsetLeft;
+        const top = Math.min(startY, curY) - container.offsetTop;
+        const width = Math.abs(curX - startX);
+        const height = Math.abs(curY - startY);
+
+        selectionBox.style.left = left + 'px';
+        selectionBox.style.top = top + 'px';
+        selectionBox.style.width = width + 'px';
+        selectionBox.style.height = height + 'px';
+        return;
+    }
+
     if (state.isPanning) {
         state.pan.x = e.clientX - state.startPan.x;
         state.pan.y = e.clientY - state.startPan.y;
@@ -291,7 +321,52 @@ window.addEventListener('mousemove', (e) => {
     }
 });
 
-window.addEventListener('mouseup', () => {
+window.addEventListener('mouseup', (e) => {
+    if (state.isMarqueeSelecting) {
+        state.isMarqueeSelecting = false;
+        selectionBox.style.display = 'none';
+
+        const curX = e.clientX;
+        const curY = e.clientY;
+        const startX = state.marqueeStart.x;
+        const startY = state.marqueeStart.y;
+
+        const screenLeft = Math.min(startX, curX) - container.offsetLeft;
+        const screenTop = Math.min(startY, curY) - container.offsetTop;
+        const screenRight = screenLeft + Math.abs(curX - startX);
+        const screenBottom = screenTop + Math.abs(curY - startY);
+
+        const worldMinX = (screenLeft - state.pan.x) / state.scale;
+        const worldMinY = (screenTop - state.pan.y) / state.scale;
+        const worldMaxX = (screenRight - state.pan.x) / state.scale;
+        const worldMaxY = (screenBottom - state.pan.y) / state.scale;
+
+        const isAdditive = e.ctrlKey || e.metaKey || e.shiftKey;
+        if (!isAdditive) {
+            state.selectedNodes.clear();
+            state.selectedGroups.clear();
+            state.selectedEdges.clear();
+        }
+
+        state.nodes.forEach(n => {
+            if (isGroupEffectivelyCollapsed(n.groupId)) return;
+            const b = getNodeBox(n);
+            const intersects = (b.x < worldMaxX && b.x + b.w > worldMinX && b.y < worldMaxY && b.y + b.h > worldMinY);
+            if (intersects) state.selectedNodes.add(n.id);
+        });
+
+        state.groups.forEach(g => {
+            if (isGroupEffectivelyCollapsed(g.parentGroupId)) return;
+            const gh = g.collapsed ? 36 : g.height;
+            const intersects = (g.x < worldMaxX && g.x + g.width > worldMinX && g.y < worldMaxY && g.y + gh > worldMinY);
+            if (intersects) state.selectedGroups.add(g.id);
+        });
+
+        updateSelectionState();
+        render();
+        return;
+    }
+
     if (state.isPanning) {
         state.isPanning = false;
         scheduleSave();
@@ -360,7 +435,7 @@ function quickSpawnConnectedNode(sourceNodeId, direction) {
         flow: 'Traffic'
     });
 
-    selectItem('node', newNode.id);
+    selectItem('node', newNode.id, false);
     render();
     scheduleSave();
 }
@@ -385,8 +460,12 @@ function syncNodesDOM() {
             enableNodeDrag(el, n);
             el.addEventListener('click', (e) => {
                 e.stopPropagation();
-                if (state.isConnecting) handleConnectClick(n.id);
-                else selectItem('node', n.id);
+                if (state.isConnecting) {
+                    handleConnectClick(n.id);
+                } else {
+                    const isMulti = e.shiftKey || e.ctrlKey || e.metaKey;
+                    selectItem('node', n.id, isMulti);
+                }
             });
             nodesContainer.appendChild(el);
             domNodes.set(n.id, el);
@@ -396,8 +475,9 @@ function syncNodesDOM() {
         el.style.left = n.x + 'px';
         el.style.top = n.y + 'px';
 
+        const isSelected = state.selectedNodes.has(n.id);
         const icon = getNodeIcon(n.type);
-        el.className = `node-element ${n.type === 'Malicious' ? 'malicious' : ''} ${state.selected?.id === n.id ? 'selected' : ''} ${state.isConnecting && state.connectSourceId === n.id ? 'connecting-source' : ''}`;
+        el.className = `node-element ${n.type === 'Malicious' ? 'malicious' : ''} ${isSelected ? 'selected' : ''} ${state.isConnecting && state.connectSourceId === n.id ? 'connecting-source' : ''}`;
 
         el.innerHTML = `
           <span>${icon}</span><span class="node-text">${n.ip || n.name}</span>
@@ -459,7 +539,8 @@ function syncGroupsDOM() {
             enableGroupDrag(el, g);
             el.addEventListener('click', (e) => {
                 e.stopPropagation();
-                selectItem('group', g.id);
+                const isMulti = e.shiftKey || e.ctrlKey || e.metaKey;
+                selectItem('group', g.id, isMulti);
             });
             groupsContainer.appendChild(el);
             domGroups.set(g.id, el);
@@ -467,13 +548,15 @@ function syncGroupsDOM() {
 
         const color = g.color || '#0284c7';
         const depth = getGroupDepth(g.id);
+        const isSelected = state.selectedGroups.has(g.id);
+
         el.style.zIndex = 5 + depth;
         el.style.display = isHidden ? 'none' : 'block';
         el.style.setProperty('--group-color', color);
         el.style.setProperty('--group-bg-custom', hexToRgba(color, 0.05));
         el.style.setProperty('--group-header-bg', hexToRgba(color, 0.15));
 
-        el.className = `group-element ${state.selected?.id === g.id ? 'selected' : ''} ${g.collapsed ? 'collapsed' : ''}`;
+        el.className = `group-element ${isSelected ? 'selected' : ''} ${g.collapsed ? 'collapsed' : ''}`;
         el.style.left = g.x + 'px';
         el.style.top = g.y + 'px';
         el.style.width = g.width + 'px';
@@ -687,13 +770,15 @@ function renderEdges() {
                 const geom = calculateEdgeGeometry(actualFn, actualTn, effectiveIdx, edges.length);
                 if (!geom) return;
 
+                const isSelected = state.selectedEdges.has(edge.id);
                 const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                 path.setAttribute('d', geom.pathData);
-                path.setAttribute('class', `edge-line ${state.selected?.id === edge.id ? 'selected' : ''}`);
+                path.setAttribute('class', `edge-line ${isSelected ? 'selected' : ''}`);
                 path.setAttribute('marker-end', 'url(#arrow)');
                 path.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    selectItem('edge', edge.id);
+                    const isMulti = e.shiftKey || e.ctrlKey || e.metaKey;
+                    selectItem('edge', edge.id, isMulti);
                 });
                 edgesLayer.appendChild(path);
 
@@ -743,7 +828,8 @@ function renderEdges() {
                             state.expandedAggregates.delete(pairKey);
                             renderEdges();
                         } else {
-                            selectItem('edge', edge.id);
+                            const isMulti = e.shiftKey || e.ctrlKey || e.metaKey;
+                            selectItem('edge', edge.id, isMulti);
                         }
                     });
                 }
@@ -869,15 +955,73 @@ function clampWithinParentGroup(x, y, elemWidth, elemHeight, parentGroupId) {
     };
 }
 
+function getTopLevelSelectedItems() {
+    const selectedGroupIds = state.selectedGroups;
+    const topGroups = [];
+
+    selectedGroupIds.forEach(gid => {
+        let isChildOfSelected = false;
+        let curr = state.groups.find(g => g.id === gid);
+        while (curr && curr.parentGroupId) {
+            if (selectedGroupIds.has(curr.parentGroupId)) {
+                isChildOfSelected = true;
+                break;
+            }
+            curr = state.groups.find(g => g.id === curr.parentGroupId);
+        }
+        if (!isChildOfSelected) {
+            const g = state.groups.find(item => item.id === gid);
+            if (g) topGroups.push(g);
+        }
+    });
+
+    const topNodes = [];
+    state.selectedNodes.forEach(nid => {
+        const n = state.nodes.find(item => item.id === nid);
+        if (!n) return;
+        let isUnderSelectedGroup = false;
+        let currG = n.groupId ? state.groups.find(g => g.id === n.groupId) : null;
+        while (currG) {
+            if (selectedGroupIds.has(currG.id)) {
+                isUnderSelectedGroup = true;
+                break;
+            }
+            currG = currG.parentGroupId ? state.groups.find(g => g.id === currG.parentGroupId) : null;
+        }
+        if (!isUnderSelectedGroup) {
+            topNodes.push(n);
+        }
+    });
+
+    return { topGroups, topNodes };
+}
+
 function enableNodeDrag(el, node) {
     let isDragging = false, sx, sy, moved = false;
+    let initialPositions = new Map();
 
-    const startDrag = (clientX, clientY) => {
+    const startDrag = (clientX, clientY, isMultiModifier = false) => {
         if (state.isConnecting) return;
+
+        // Если зажат модификатор (Shift/Ctrl/Cmd), перетаскивание не запускаем, давая сработать клику
+        if (isMultiModifier) {
+            return;
+        }
+
+        // Если кликнули по ноде, которая ещё не в выделении, делаем её единственной выделенной
+        if (!state.selectedNodes.has(node.id)) {
+            selectItem('node', node.id, false);
+        }
+
         isDragging = true;
         moved = false;
         sx = clientX;
         sy = clientY;
+
+        initialPositions.clear();
+        const { topGroups, topNodes } = getTopLevelSelectedItems();
+        topNodes.forEach(n => initialPositions.set('node:' + n.id, { x: n.x, y: n.y }));
+        topGroups.forEach(g => initialPositions.set('group:' + g.id, { x: g.x, y: g.y }));
     };
 
     const moveDrag = (clientX, clientY) => {
@@ -887,21 +1031,48 @@ function enableNodeDrag(el, node) {
         const dx = (clientX - sx) / state.scale;
         const dy = (clientY - sy) / state.scale;
 
-        let targetX = node.x + dx;
-        let targetY = node.y + dy;
+        const { topGroups, topNodes } = getTopLevelSelectedItems();
 
-        if (node.groupId) {
-            const clamped = clampWithinParentGroup(targetX, targetY, 95, 28, node.groupId);
-            targetX = clamped.x;
-            targetY = clamped.y;
-        }
+        topNodes.forEach(n => {
+            const init = initialPositions.get('node:' + n.id);
+            if (!init) return;
+            let targetX = init.x + dx;
+            let targetY = init.y + dy;
 
-        node.x = targetX;
-        node.y = targetY;
-        el.style.left = node.x + 'px';
-        el.style.top = node.y + 'px';
-        sx = clientX;
-        sy = clientY;
+            if (n.groupId && topNodes.length === 1 && topGroups.length === 0) {
+                const clamped = clampWithinParentGroup(targetX, targetY, 95, 28, n.groupId);
+                targetX = clamped.x;
+                targetY = clamped.y;
+            }
+
+            n.x = Math.round(targetX);
+            n.y = Math.round(targetY);
+
+            const nEl = domNodes.get(n.id);
+            if (nEl) {
+                nEl.style.left = n.x + 'px';
+                nEl.style.top = n.y + 'px';
+            }
+        });
+
+        topGroups.forEach(g => {
+            const init = initialPositions.get('group:' + g.id);
+            if (!init) return;
+            const targetX = Math.round(init.x + dx);
+            const targetY = Math.round(init.y + dy);
+            const curDx = targetX - g.x;
+            const curDy = targetY - g.y;
+
+            g.x = targetX;
+            g.y = targetY;
+            const gEl = domGroups.get(g.id);
+            if (gEl) {
+                gEl.style.left = g.x + 'px';
+                gEl.style.top = g.y + 'px';
+            }
+            moveGroupRecursively(g.id, curDx, curDy);
+        });
+
         renderEdges();
     };
 
@@ -915,7 +1086,9 @@ function enableNodeDrag(el, node) {
     el.addEventListener('mousedown', (e) => {
         if (e.button !== 0 || e.target.closest('.quick-port')) return;
         e.stopPropagation();
-        startDrag(e.clientX, e.clientY);
+        const isMulti = e.shiftKey || e.ctrlKey || e.metaKey;
+        startDrag(e.clientX, e.clientY, isMulti);
+
         const onMouseMove = (ev) => moveDrag(ev.clientX, ev.clientY);
         const onMouseUp = () => {
             endDrag();
@@ -929,7 +1102,7 @@ function enableNodeDrag(el, node) {
     el.addEventListener('touchstart', (e) => {
         if (e.touches.length !== 1) return;
         e.stopPropagation();
-        startDrag(e.touches[0].clientX, e.touches[0].clientY);
+        startDrag(e.touches[0].clientX, e.touches[0].clientY, false);
 
         const onTouchMove = (ev) => {
             if (!isDragging || ev.touches.length !== 1) return;
@@ -983,13 +1156,28 @@ function moveGroupRecursively(groupId, dx, dy) {
 
 function enableGroupDrag(el, group) {
     let isDragging = false, sx, sy, moved = false;
+    let initialPositions = new Map();
 
-    const startDrag = (clientX, clientY) => {
+    const startDrag = (clientX, clientY, isMultiModifier = false) => {
         if (state.isConnecting) return;
+
+        if (isMultiModifier) {
+            return;
+        }
+
+        if (!state.selectedGroups.has(group.id)) {
+            selectItem('group', group.id, false);
+        }
+
         isDragging = true;
         moved = false;
         sx = clientX;
         sy = clientY;
+
+        initialPositions.clear();
+        const { topGroups, topNodes } = getTopLevelSelectedItems();
+        topNodes.forEach(n => initialPositions.set('node:' + n.id, { x: n.x, y: n.y }));
+        topGroups.forEach(g => initialPositions.set('group:' + g.id, { x: g.x, y: g.y }));
     };
 
     const moveDrag = (clientX, clientY) => {
@@ -999,26 +1187,39 @@ function enableGroupDrag(el, group) {
         const dx = (clientX - sx) / state.scale;
         const dy = (clientY - sy) / state.scale;
 
-        let targetX = group.x + dx;
-        let targetY = group.y + dy;
+        const { topGroups, topNodes } = getTopLevelSelectedItems();
 
-        if (group.parentGroupId) {
-            const clamped = clampWithinParentGroup(targetX, targetY, group.width, group.height, group.parentGroupId);
-            const appliedDx = clamped.x - group.x;
-            const appliedDy = clamped.y - group.y;
-            group.x = clamped.x;
-            group.y = clamped.y;
-            moveGroupRecursively(group.id, appliedDx, appliedDy);
-        } else {
-            group.x = targetX;
-            group.y = targetY;
-            moveGroupRecursively(group.id, dx, dy);
-        }
+        topNodes.forEach(n => {
+            const init = initialPositions.get('node:' + n.id);
+            if (!init) return;
+            n.x = Math.round(init.x + dx);
+            n.y = Math.round(init.y + dy);
 
-        el.style.left = group.x + 'px';
-        el.style.top = group.y + 'px';
-        sx = clientX;
-        sy = clientY;
+            const nEl = domNodes.get(n.id);
+            if (nEl) {
+                nEl.style.left = n.x + 'px';
+                nEl.style.top = n.y + 'px';
+            }
+        });
+
+        topGroups.forEach(g => {
+            const init = initialPositions.get('group:' + g.id);
+            if (!init) return;
+            const targetX = Math.round(init.x + dx);
+            const targetY = Math.round(init.y + dy);
+            const curDx = targetX - g.x;
+            const curDy = targetY - g.y;
+
+            g.x = targetX;
+            g.y = targetY;
+            const gEl = domGroups.get(g.id);
+            if (gEl) {
+                gEl.style.left = g.x + 'px';
+                gEl.style.top = g.y + 'px';
+            }
+            moveGroupRecursively(g.id, curDx, curDy);
+        });
+
         renderEdges();
     };
 
@@ -1032,7 +1233,8 @@ function enableGroupDrag(el, group) {
     el.addEventListener('mousedown', (e) => {
         if (e.button !== 0 || e.target.classList.contains('collapse-btn') || e.target.classList.contains('resizer')) return;
         e.stopPropagation();
-        startDrag(e.clientX, e.clientY);
+        const isMulti = e.shiftKey || e.ctrlKey || e.metaKey;
+        startDrag(e.clientX, e.clientY, isMulti);
 
         const onMouseMove = (ev) => moveDrag(ev.clientX, ev.clientY);
         const onMouseUp = () => {
@@ -1047,7 +1249,7 @@ function enableGroupDrag(el, group) {
     el.addEventListener('touchstart', (e) => {
         if (e.touches.length !== 1 || e.target.classList.contains('collapse-btn') || e.target.classList.contains('resizer')) return;
         e.stopPropagation();
-        startDrag(e.touches[0].clientX, e.touches[0].clientY);
+        startDrag(e.touches[0].clientX, e.touches[0].clientY, false);
 
         const onTouchMove = (ev) => {
             if (!isDragging || ev.touches.length !== 1) return;
@@ -1077,40 +1279,70 @@ function enableGroupDrag(el, group) {
 
 function clearSelection() {
     state.selected = null;
+    state.selectedNodes.clear();
+    state.selectedGroups.clear();
+    state.selectedEdges.clear();
     sidebar.style.display = 'none';
     sidebarContent.innerHTML = '';
     render();
 }
 
-function confirmAndDeleteCurrent() {
-    if (!state.selected) return;
-    const { type, id } = state.selected;
+function getSelectionCounts() {
+    return {
+        nodes: state.selectedNodes.size,
+        groups: state.selectedGroups.size,
+        edges: state.selectedEdges.size,
+        total: state.selectedNodes.size + state.selectedGroups.size + state.selectedEdges.size
+    };
+}
 
-    let confirmMsg = 'Вы уверены, что хотите удалить выбранный объект?';
-    if (type === 'node') {
-        const n = state.nodes.find(item => item.id === id);
-        confirmMsg = `Удалить хост "${n ? (n.ip || n.name) : ''}"? Все связанные потоки также будут удалены.`;
-    } else if (type === 'edge') {
-        const e = state.edges.find(item => item.id === id);
-        confirmMsg = `Удалить связь [${e ? e.port : ''}] "${e ? e.flow : ''}"?`;
-    } else if (type === 'group') {
-        const g = state.groups.find(item => item.id === id);
-        confirmMsg = `Удалить группу "${g ? g.name : ''}"? (Вложенные хосты и подгруппы перейдут на уровень выше)`;
+function confirmAndDeleteCurrent() {
+    const counts = getSelectionCounts();
+    if (counts.total === 0) return;
+
+    let confirmMsg = '';
+    if (counts.total === 1) {
+        if (counts.nodes === 1) {
+            const id = Array.from(state.selectedNodes)[0];
+            const n = state.nodes.find(item => item.id === id);
+            confirmMsg = `Удалить хост "${n ? (n.ip || n.name) : ''}"? Все связанные потоки также будут удалены.`;
+        } else if (counts.groups === 1) {
+            const id = Array.from(state.selectedGroups)[0];
+            const g = state.groups.find(item => item.id === id);
+            confirmMsg = `Удалить группу "${g ? g.name : ''}"? (Вложенные хосты и подгруппы перейдут на уровень выше)`;
+        } else if (counts.edges === 1) {
+            const id = Array.from(state.selectedEdges)[0];
+            const e = state.edges.find(item => item.id === id);
+            confirmMsg = `Удалить связь [${e ? e.port : ''}] "${e ? e.flow : ''}"?`;
+        }
+    } else {
+        const details = [];
+        if (counts.nodes) details.push(`${counts.nodes} хост(ов)`);
+        if (counts.groups) details.push(`${counts.groups} групп(ы)`);
+        if (counts.edges) details.push(`${counts.edges} связей`);
+        confirmMsg = `Удалить выбранные объекты (${details.join(', ')})?`;
     }
 
     if (confirm(confirmMsg)) {
-        if (type === 'node') {
-            state.nodes = state.nodes.filter(n => n.id !== id);
-            state.edges = state.edges.filter(e => e.from !== id && e.to !== id);
-        } else if (type === 'edge') {
-            state.edges = state.edges.filter(e => e.id !== id);
-        } else if (type === 'group') {
-            const removedGroup = state.groups.find(g => g.id === id);
-            const parentId = removedGroup ? removedGroup.parentGroupId : null;
-            state.groups = state.groups.filter(g => g.id !== id);
-            state.groups.forEach(g => { if (g.parentGroupId === id) g.parentGroupId = parentId; });
-            state.nodes.forEach(n => { if (n.groupId === id) n.groupId = parentId; });
+        if (state.selectedEdges.size > 0) {
+            state.edges = state.edges.filter(e => !state.selectedEdges.has(e.id));
         }
+
+        if (state.selectedNodes.size > 0) {
+            state.nodes = state.nodes.filter(n => !state.selectedNodes.has(n.id));
+            state.edges = state.edges.filter(e => !state.selectedNodes.has(e.from) && !state.selectedNodes.has(e.to));
+        }
+
+        if (state.selectedGroups.size > 0) {
+            state.selectedGroups.forEach(gid => {
+                const removedGroup = state.groups.find(g => g.id === gid);
+                const parentId = removedGroup ? removedGroup.parentGroupId : null;
+                state.groups.forEach(g => { if (g.parentGroupId === gid) g.parentGroupId = parentId; });
+                state.nodes.forEach(n => { if (n.groupId === gid) n.groupId = parentId; });
+            });
+            state.groups = state.groups.filter(g => !state.selectedGroups.has(g.id));
+        }
+
         clearSelection();
         scheduleSave();
     }
@@ -1125,107 +1357,225 @@ function isDescendantGroup(potentialChildId, targetGroupId) {
     return false;
 }
 
-function selectItem(type, id) {
-    state.selected = { type, id };
+function selectItem(type, id, isMulti = false) {
+    if (!isMulti) {
+        state.selectedNodes.clear();
+        state.selectedGroups.clear();
+        state.selectedEdges.clear();
+    }
+
+    if (type === 'node') {
+        if (isMulti && state.selectedNodes.has(id)) {
+            state.selectedNodes.delete(id);
+        } else {
+            state.selectedNodes.add(id);
+        }
+    } else if (type === 'group') {
+        if (isMulti && state.selectedGroups.has(id)) {
+            state.selectedGroups.delete(id);
+        } else {
+            state.selectedGroups.add(id);
+        }
+    } else if (type === 'edge') {
+        if (isMulti && state.selectedEdges.has(id)) {
+            state.selectedEdges.delete(id);
+        } else {
+            state.selectedEdges.add(id);
+        }
+    }
+
+    updateSelectionState();
     render();
+}
+
+function updateSelectionState() {
+    const counts = getSelectionCounts();
+    if (counts.total === 0) {
+        state.selected = null;
+        sidebar.style.display = 'none';
+        sidebarContent.innerHTML = '';
+        return;
+    }
+
     sidebar.style.display = 'block';
     sidebarContent.innerHTML = '';
 
-    if (type === 'node') {
-        const node = state.nodes.find(n => n.id === id);
-        if (!node) return;
-        sidebarTitle.innerText = 'Хост';
-        let groupOptions = `<option value="">-- Без группы (Свободный) --</option>`;
-        state.groups.forEach(g => {
-            groupOptions += `<option value="${g.id}" ${node.groupId === g.id ? 'selected' : ''}>${g.name}</option>`;
-        });
-
-        sidebarContent.innerHTML = `
-          <div class="form-group"><label>Имя</label><input type="text" id="prop-name" value="${node.name}"></div>
-          <div class="form-group"><label>IP Адрес</label><input type="text" id="prop-ip" value="${node.ip || ''}"></div>
-          <div class="form-group"><label>Привязка к группе</label><select id="prop-group">${groupOptions}</select></div>
-          <div class="form-group"><label>Тип</label><select id="prop-type">
-            <option value="Host" ${node.type==='Host'?'selected':''}>Обычный хост (Host)</option>
-            <option value="Server" ${node.type==='Server'?'selected':''}>Сервер (Server)</option>
-            <option value="Malicious" ${node.type==='Malicious'?'selected':''}>Вредоносный хост (Malicious)</option>
-            <option value="Gateway" ${node.type==='Gateway'?'selected':''}>Шлюз / Маршрутизатор (Gateway)</option>
-            <option value="Database" ${node.type==='Database'?'selected':''}>База Данных (DB)</option>
-            <option value="Firewall" ${node.type==='Firewall'?'selected':''}>Файрвол (FW)</option>
-          </select></div>
-          <button class="btn btn-danger sidebar-delete-btn" id="sidebar-delete-action">🗑️ Удалить этот хост</button>
-        `;
-        document.getElementById('prop-name').oninput = (e) => { node.name = e.target.value; syncNodesDOM(); scheduleSave(); };
-        document.getElementById('prop-ip').oninput = (e) => { node.ip = e.target.value; syncNodesDOM(); scheduleSave(); };
-        document.getElementById('prop-group').onchange = (e) => {
-            node.groupId = e.target.value || null;
-            if (node.groupId) {
-                const clamped = clampWithinParentGroup(node.x, node.y, 95, 28, node.groupId);
-                node.x = clamped.x;
-                node.y = clamped.y;
-            }
-            render();
-            scheduleSave();
-        };
-        document.getElementById('prop-type').onchange = (e) => { node.type = e.target.value; syncNodesDOM(); scheduleSave(); };
-        document.getElementById('sidebar-delete-action').onclick = confirmAndDeleteCurrent;
+    if (counts.total === 1) {
+        if (counts.nodes === 1) {
+            const id = Array.from(state.selectedNodes)[0];
+            state.selected = { type: 'node', id };
+            renderSingleNodeSidebar(id);
+        } else if (counts.groups === 1) {
+            const id = Array.from(state.selectedGroups)[0];
+            state.selected = { type: 'group', id };
+            renderSingleGroupSidebar(id);
+        } else if (counts.edges === 1) {
+            const id = Array.from(state.selectedEdges)[0];
+            state.selected = { type: 'edge', id };
+            renderSingleEdgeSidebar(id);
+        }
+        return;
     }
 
-    if (type === 'edge') {
-        const edge = state.edges.find(e => e.id === id);
-        if (!edge) return;
-        sidebarTitle.innerText = 'Связь (Поток)';
-        sidebarContent.innerHTML = `
-          <div class="form-group"><label>Порт назначения (dst_port)</label><input type="text" id="prop-port" value="${edge.port || ''}"></div>
-          <div class="form-group"><label>Назначение (comment)</label><input type="text" id="prop-flow" value="${edge.flow || ''}"></div>
-          <button class="btn btn-danger sidebar-delete-btn" id="sidebar-delete-action">🗑️ Удалить эту связь</button>
-        `;
-        document.getElementById('prop-port').oninput = (e) => { edge.port = e.target.value; renderEdges(); scheduleSave(); };
-        document.getElementById('prop-flow').oninput = (e) => { edge.flow = e.target.value; renderEdges(); scheduleSave(); };
-        document.getElementById('sidebar-delete-action').onclick = confirmAndDeleteCurrent;
-    }
-
-    if (type === 'group') {
-        const group = state.groups.find(g => g.id === id);
-        if (!group) return;
-        sidebarTitle.innerText = 'Группа / Сеть';
-
-        let parentOptions = `<option value="">-- Корневой уровень (без родителя) --</option>`;
-        state.groups.forEach(g => {
-            if (g.id !== group.id && !isDescendantGroup(g.id, group.id)) {
-                parentOptions += `<option value="${g.id}" ${group.parentGroupId === g.id ? 'selected' : ''}>${g.name}</option>`;
-            }
-        });
-
-        sidebarContent.innerHTML = `
-          <div class="form-group"><label>Название</label><input type="text" id="prop-gname" value="${group.name}"></div>
-          <div class="form-group"><label>Цвет группы</label><input type="color" id="prop-gcolor" value="${group.color || '#0284c7'}"></div>
-          <div class="form-group"><label>Родительская группа</label><select id="prop-gparent">${parentOptions}</select></div>
-          <div class="form-group"><label>Ширина (px)</label><input type="number" id="prop-gw" value="${group.width}"></div>
-          <div class="form-group"><label>Высота (px)</label><input type="number" id="prop-gh" value="${group.height}"></div>
-          <button class="btn btn-danger sidebar-delete-btn" id="sidebar-delete-action">🗑️ Удалить эту группу</button>
-        `;
-        document.getElementById('prop-gname').oninput = (e) => { group.name = e.target.value; render(); scheduleSave(); };
-        document.getElementById('prop-gcolor').oninput = (e) => { group.color = e.target.value; render(); scheduleSave(); };
-        document.getElementById('prop-gparent').onchange = (e) => {
-            group.parentGroupId = e.target.value || null;
-            if (group.parentGroupId) {
-                const clamped = clampWithinParentGroup(group.x, group.y, group.width, group.height, group.parentGroupId);
-                const dx = clamped.x - group.x;
-                const dy = clamped.y - group.y;
-                group.x = clamped.x;
-                group.y = clamped.y;
-                moveGroupRecursively(group.id, dx, dy);
-            }
-            render();
-            scheduleSave();
-        };
-        document.getElementById('prop-gw').oninput = (e) => { group.width = parseInt(e.target.value) || 160; render(); scheduleSave(); };
-        document.getElementById('prop-gh').oninput = (e) => { group.height = parseInt(e.target.value) || 100; render(); scheduleSave(); };
-        document.getElementById('sidebar-delete-action').onclick = confirmAndDeleteCurrent;
-    }
+    state.selected = { type: 'multi', id: null };
+    renderMultiSelectSidebar(counts);
 }
 
-document.getElementById('btn-close-sidebar').onclick = () => { sidebar.style.display = 'none'; };
+function renderSingleNodeSidebar(id) {
+    const node = state.nodes.find(n => n.id === id);
+    if (!node) return;
+    sidebarTitle.innerText = 'Хост';
+    let groupOptions = `<option value="">-- Без группы (Свободный) --</option>`;
+    state.groups.forEach(g => {
+        groupOptions += `<option value="${g.id}" ${node.groupId === g.id ? 'selected' : ''}>${g.name}</option>`;
+    });
+
+    sidebarContent.innerHTML = `
+      <div class="form-group"><label>Имя</label><input type="text" id="prop-name" value="${node.name}"></div>
+      <div class="form-group"><label>IP Адрес</label><input type="text" id="prop-ip" value="${node.ip || ''}"></div>
+      <div class="form-group"><label>Привязка к группе</label><select id="prop-group">${groupOptions}</select></div>
+      <div class="form-group"><label>Тип</label><select id="prop-type">
+        <option value="Host" ${node.type==='Host'?'selected':''}>Обычный хост (Host)</option>
+        <option value="Server" ${node.type==='Server'?'selected':''}>Сервер (Server)</option>
+        <option value="Malicious" ${node.type==='Malicious'?'selected':''}>Вредоносный хост (Malicious)</option>
+        <option value="Gateway" ${node.type==='Gateway'?'selected':''}>Шлюз / Маршрутизатор (Gateway)</option>
+        <option value="Database" ${node.type==='Database'?'selected':''}>База Данных (DB)</option>
+        <option value="Firewall" ${node.type==='Firewall'?'selected':''}>Файрвол (FW)</option>
+      </select></div>
+      <button class="btn btn-danger sidebar-delete-btn" id="sidebar-delete-action">🗑️ Удалить этот хост [Del]</button>
+    `;
+    document.getElementById('prop-name').oninput = (e) => { node.name = e.target.value; syncNodesDOM(); scheduleSave(); };
+    document.getElementById('prop-ip').oninput = (e) => { node.ip = e.target.value; syncNodesDOM(); scheduleSave(); };
+    document.getElementById('prop-group').onchange = (e) => {
+        node.groupId = e.target.value || null;
+        if (node.groupId) {
+            const clamped = clampWithinParentGroup(node.x, node.y, 95, 28, node.groupId);
+            node.x = clamped.x;
+            node.y = clamped.y;
+        }
+        render();
+        scheduleSave();
+    };
+    document.getElementById('prop-type').onchange = (e) => { node.type = e.target.value; syncNodesDOM(); scheduleSave(); };
+    document.getElementById('sidebar-delete-action').onclick = confirmAndDeleteCurrent;
+}
+
+function renderSingleEdgeSidebar(id) {
+    const edge = state.edges.find(e => e.id === id);
+    if (!edge) return;
+    sidebarTitle.innerText = 'Связь (Поток)';
+    sidebarContent.innerHTML = `
+      <div class="form-group"><label>Порт назначения (dst_port)</label><input type="text" id="prop-port" value="${edge.port || ''}"></div>
+      <div class="form-group"><label>Назначение (comment)</label><input type="text" id="prop-flow" value="${edge.flow || ''}"></div>
+      <button class="btn btn-danger sidebar-delete-btn" id="sidebar-delete-action">🗑️ Удалить эту связь [Del]</button>
+    `;
+    document.getElementById('prop-port').oninput = (e) => { edge.port = e.target.value; renderEdges(); scheduleSave(); };
+    document.getElementById('prop-flow').oninput = (e) => { edge.flow = e.target.value; renderEdges(); scheduleSave(); };
+    document.getElementById('sidebar-delete-action').onclick = confirmAndDeleteCurrent;
+}
+
+function renderSingleGroupSidebar(id) {
+    const group = state.groups.find(g => g.id === id);
+    if (!group) return;
+    sidebarTitle.innerText = 'Группа / Сеть';
+
+    let parentOptions = `<option value="">-- Корневой уровень (без родителя) --</option>`;
+    state.groups.forEach(g => {
+        if (g.id !== group.id && !isDescendantGroup(g.id, group.id)) {
+            parentOptions += `<option value="${g.id}" ${group.parentGroupId === g.id ? 'selected' : ''}>${g.name}</option>`;
+        }
+    });
+
+    sidebarContent.innerHTML = `
+      <div class="form-group"><label>Название</label><input type="text" id="prop-gname" value="${group.name}"></div>
+      <div class="form-group"><label>Цвет группы</label><input type="color" id="prop-gcolor" value="${group.color || '#0284c7'}"></div>
+      <div class="form-group"><label>Родительская группа</label><select id="prop-gparent">${parentOptions}</select></div>
+      <div class="form-group"><label>Ширина (px)</label><input type="number" id="prop-gw" value="${group.width}"></div>
+      <div class="form-group"><label>Высота (px)</label><input type="number" id="prop-gh" value="${group.height}"></div>
+      <button class="btn btn-danger sidebar-delete-btn" id="sidebar-delete-action">🗑️ Удалить эту группу [Del]</button>
+    `;
+    document.getElementById('prop-gname').oninput = (e) => { group.name = e.target.value; render(); scheduleSave(); };
+    document.getElementById('prop-gcolor').oninput = (e) => { group.color = e.target.value; render(); scheduleSave(); };
+    document.getElementById('prop-gparent').onchange = (e) => {
+        group.parentGroupId = e.target.value || null;
+        if (group.parentGroupId) {
+            const clamped = clampWithinParentGroup(group.x, group.y, group.width, group.height, group.parentGroupId);
+            const dx = clamped.x - group.x;
+            const dy = clamped.y - group.y;
+            group.x = clamped.x;
+            group.y = clamped.y;
+            moveGroupRecursively(group.id, dx, dy);
+        }
+        render();
+        scheduleSave();
+    };
+    document.getElementById('prop-gw').oninput = (e) => { group.width = parseInt(e.target.value) || 160; render(); scheduleSave(); };
+    document.getElementById('prop-gh').oninput = (e) => { group.height = parseInt(e.target.value) || 100; render(); scheduleSave(); };
+    document.getElementById('sidebar-delete-action').onclick = confirmAndDeleteCurrent;
+}
+
+function renderMultiSelectSidebar(counts) {
+    sidebarTitle.innerText = `Выбрано: ${counts.total}`;
+
+    let statBadges = '';
+    if (counts.nodes) statBadges += `<span class="multi-stat-badge">🖥️ Хосты: ${counts.nodes}</span>`;
+    if (counts.groups) statBadges += `<span class="multi-stat-badge">🔲 Группы: ${counts.groups}</span>`;
+    if (counts.edges) statBadges += `<span class="multi-stat-badge">↔️ Связи: ${counts.edges}</span>`;
+
+    let groupOptions = `<option value="">-- Без изменений --</option><option value="__ROOT__">-- В корень (убрать из групп) --</option>`;
+    state.groups.forEach(g => {
+        groupOptions += `<option value="${g.id}">${g.name}</option>`;
+    });
+
+    let batchActionsHtml = `
+      <div style="margin-bottom: 12px;">${statBadges}</div>
+    `;
+
+    if (counts.nodes > 0) {
+        batchActionsHtml += `
+          <div class="form-group">
+            <label>Переместить выбранные хосты в группу:</label>
+            <select id="batch-node-group">${groupOptions}</select>
+          </div>
+        `;
+    }
+
+    batchActionsHtml += `
+      <button class="btn btn-danger sidebar-delete-btn" id="sidebar-delete-action">🗑️ Удалить все выбранные (${counts.total}) [Del]</button>
+    `;
+
+    sidebarContent.innerHTML = batchActionsHtml;
+
+    const batchGroupSelect = document.getElementById('batch-node-group');
+    if (batchGroupSelect) {
+        batchGroupSelect.onchange = (e) => {
+            const val = e.target.value;
+            if (!val) return;
+            const targetGroupId = (val === '__ROOT__') ? null : val;
+
+            state.selectedNodes.forEach(nid => {
+                const node = state.nodes.find(n => n.id === nid);
+                if (node) {
+                    node.groupId = targetGroupId;
+                    if (targetGroupId) {
+                        const clamped = clampWithinParentGroup(node.x, node.y, 95, 28, targetGroupId);
+                        node.x = clamped.x;
+                        node.y = clamped.y;
+                    }
+                }
+            });
+            render();
+            scheduleSave();
+            batchGroupSelect.value = '';
+        };
+    }
+
+    document.getElementById('sidebar-delete-action').onclick = confirmAndDeleteCurrent;
+}
+
+document.getElementById('btn-close-sidebar').onclick = () => {
+    sidebar.style.display = 'none';
+};
 
 function handleConnectClick(nodeId) {
     if (!state.connectSourceId) {
@@ -1249,14 +1599,27 @@ function handleConnectClick(nodeId) {
     }
 }
 
-document.getElementById('btn-connect').onclick = () => {
+function toggleConnectMode() {
     state.isConnecting = !state.isConnecting;
-    state.connectSourceId = null;
+
+    if (state.isConnecting) {
+        // Если перед включением уже был выбран ровно один хост, он становится источником
+        if (state.selectedNodes.size === 1) {
+            state.connectSourceId = Array.from(state.selectedNodes)[0];
+        } else {
+            state.connectSourceId = null;
+        }
+    } else {
+        state.connectSourceId = null;
+    }
+
     document.getElementById('btn-connect').classList.toggle('active', state.isConnecting);
     syncNodesDOM();
-};
+}
 
-document.getElementById('btn-add-host').onclick = () => {
+document.getElementById('btn-connect').onclick = toggleConnectMode;
+
+function addNewHostAtCenter() {
     const cx = (-state.pan.x + window.innerWidth / 2) / state.scale - 45;
     const cy = (-state.pan.y + window.innerHeight / 2) / state.scale - 14;
     const host = {
@@ -1269,11 +1632,13 @@ document.getElementById('btn-add-host').onclick = () => {
         y: Math.round(cy)
     };
     state.nodes.push(host);
-    selectItem('node', host.id);
+    selectItem('node', host.id, false);
     scheduleSave();
-};
+}
 
-document.getElementById('btn-add-group').onclick = () => {
+document.getElementById('btn-add-host').onclick = addNewHostAtCenter;
+
+function addNewGroupAtCenter() {
     const cx = (-state.pan.x + window.innerWidth / 2) / state.scale - 140;
     const cy = (-state.pan.y + window.innerHeight / 2) / state.scale - 90;
     const group = {
@@ -1288,9 +1653,11 @@ document.getElementById('btn-add-group').onclick = () => {
         collapsed: false
     };
     state.groups.push(group);
-    selectItem('group', group.id);
+    selectItem('group', group.id, false);
     scheduleSave();
-};
+}
+
+document.getElementById('btn-add-group').onclick = addNewGroupAtCenter;
 
 document.getElementById('btn-toggle-flow').onclick = () => {
     state.flowEnabled = !state.flowEnabled;
@@ -1313,22 +1680,99 @@ document.getElementById('btn-clear-all').onclick = () => {
     }
 };
 
-document.getElementById('btn-zoom-in').onclick = () => {
+function zoomIn() {
     state.scale = Math.min(3, state.scale * 1.2);
     updateTransform();
     scheduleSave();
-};
-document.getElementById('btn-zoom-out').onclick = () => {
+}
+
+function zoomOut() {
     state.scale = Math.max(0.2, state.scale / 1.2);
     updateTransform();
     scheduleSave();
-};
-document.getElementById('btn-zoom-reset').onclick = () => {
+}
+
+function zoomReset() {
     state.scale = 1;
     state.pan = { x: 0, y: 0 };
     updateTransform();
     scheduleSave();
-};
+}
+
+document.getElementById('btn-zoom-in').onclick = zoomIn;
+document.getElementById('btn-zoom-out').onclick = zoomOut;
+document.getElementById('btn-zoom-reset').onclick = zoomReset;
+
+function selectAllItems() {
+    state.selectedNodes.clear();
+    state.selectedGroups.clear();
+    state.selectedEdges.clear();
+    state.nodes.forEach(n => state.selectedNodes.add(n.id));
+    state.groups.forEach(g => state.selectedGroups.add(g.id));
+    state.edges.forEach(e => state.selectedEdges.add(e.id));
+    updateSelectionState();
+    render();
+}
+
+window.addEventListener('keydown', (e) => {
+    const targetTag = e.target.tagName ? e.target.tagName.toLowerCase() : '';
+    const isTyping = targetTag === 'input' || targetTag === 'textarea' || targetTag === 'select' || e.target.isContentEditable;
+
+    if (e.key === 'Escape') {
+        if (modal.classList.contains('active')) {
+            modal.classList.remove('active');
+            return;
+        }
+        if (state.isConnecting) {
+            state.isConnecting = false;
+            state.connectSourceId = null;
+            document.getElementById('btn-connect').classList.remove('active');
+            syncNodesDOM();
+            return;
+        }
+        clearSelection();
+        return;
+    }
+
+    if (isTyping) return;
+
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A' || e.code === 'KeyA')) {
+        e.preventDefault();
+        selectAllItems();
+        return;
+    }
+
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        confirmAndDeleteCurrent();
+        return;
+    }
+
+    if ((e.ctrlKey || e.metaKey) && (e.key === '0' || e.code === 'Digit0')) {
+        e.preventDefault();
+        zoomReset();
+        return;
+    }
+
+    if (!e.ctrlKey && !e.altKey && !e.metaKey) {
+        if (e.key === 'h' || e.key === 'H' || e.code === 'KeyH') {
+            e.preventDefault();
+            addNewHostAtCenter();
+        } else if (e.key === 'g' || e.key === 'G' || e.code === 'KeyG') {
+            e.preventDefault();
+            addNewGroupAtCenter();
+        } else if (e.key === 'c' || e.key === 'C' || e.code === 'KeyC') {
+            e.preventDefault();
+            toggleConnectMode();
+        } else if (e.key === '+' || e.key === '=') {
+            e.preventDefault();
+            zoomIn();
+        } else if (e.key === '-' || e.key === '_') {
+            e.preventDefault();
+            zoomOut();
+        }
+    }
+});
 
 document.getElementById('btn-save-json').onclick = () => {
     const data = JSON.stringify({
@@ -1513,7 +1957,7 @@ document.getElementById('btn-run-import').onclick = () => {
     });
 
     modal.classList.remove('active');
-    selectItem('group', importGroupId);
+    selectItem('group', importGroupId, false);
     render();
     scheduleSave();
 };
@@ -1717,9 +2161,6 @@ document.getElementById('btn-export-drawio').onclick = () => {
     downloadBlob(xml, 'network_topology.drawio', 'application/vnd.jgraph.mxfile');
 };
 
-// ==========================================
-// TOUCH GESTURES (PAN & PINCH-TO-ZOOM)
-// ==========================================
 let touchStartDist = 0;
 let touchStartScale = 1;
 let touchStartCenter = { x: 0, y: 0 };
@@ -1787,10 +2228,6 @@ window.addEventListener('touchend', (e) => {
         touchStartDist = 0;
     }
 });
-
-// ==========================================
-// SHARE VIA URL (DEFLATE + URL-SAFE BASE64)
-// ==========================================
 
 function uint8ArrayToBase64(bytes) {
     let binary = '';
@@ -1916,9 +2353,6 @@ function applyNewState(newState) {
     render();
 }
 
-// ==========================================
-// ИНИЦИАЛИЗАЦИЯ (ПРИОРИТЕТ: URL -> LOCALSTORAGE -> DEMO)
-// ==========================================
 async function startApp() {
     const hash = window.location.hash;
 
