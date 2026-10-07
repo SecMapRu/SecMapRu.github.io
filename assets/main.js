@@ -102,25 +102,40 @@ function loadSavedState() {
 }
 
 function initDemo() {
+    // ---------------------------------------------------------
+    // 1. ЗОНЫ / ГРУППЫ СЕТИ
+    // ---------------------------------------------------------
     const gExternal = {
         id: uid(),
         parentGroupId: null,
         name: 'External Threat Zone (Internet)',
         color: '#ef4444',
-        x: 60,
-        y: 80,
+        x: -16,
+        y: 73,
         width: 320,
         height: 440,
         collapsed: false
     };
 
-    const gCorp = {
+    const gCompany = {
         id: uid(),
         parentGroupId: null,
+        name: 'Название вашей компании',
+        color: '#0284c7',
+        x: 376,
+        y: 16,
+        width: 929,
+        height: 546,
+        collapsed: false
+    };
+
+    const gCorp = {
+        id: uid(),
+        parentGroupId: gCompany.id,
         name: 'Corporate Office LAN (User Segment)',
         color: '#f59e0b',
-        x: 440,
-        y: 80,
+        x: 415,
+        y: 78,
         width: 380,
         height: 440,
         collapsed: false
@@ -128,35 +143,39 @@ function initDemo() {
 
     const gDC = {
         id: uid(),
-        parentGroupId: null,
+        parentGroupId: gCompany.id,
         name: 'Restricted Data Center (Core Infra)',
         color: '#10b981',
-        x: 880,
-        y: 80,
+        x: 898,
+        y: 79,
         width: 380,
         height: 440,
         collapsed: false
     };
 
-    state.groups.push(gExternal, gCorp, gDC);
+    state.groups.push(gExternal, gCompany, gCorp, gDC);
 
+    // ---------------------------------------------------------
+    // 2. УЗЛЫ / ХОСТЫ
+    // ---------------------------------------------------------
     const nC2 = {
         id: uid(),
         name: 'Attacker C2 Server',
         ip: '198.51.100.89',
         type: 'Malicious',
         groupId: gExternal.id,
-        x: 90,
-        y: 160
+        x: 14,
+        y: 153
     };
+
     const nDropZone = {
         id: uid(),
         name: 'Exfil Drop / Cloud Storage',
         ip: '203.0.113.44',
         type: 'Malicious',
         groupId: gExternal.id,
-        x: 90,
-        y: 400
+        x: 14,
+        y: 393
     };
 
     const nVictim = {
@@ -165,17 +184,18 @@ function initDemo() {
         ip: '10.10.20.105',
         type: 'Host',
         groupId: gCorp.id,
-        x: 480,
-        y: 160
+        x: 455,
+        y: 158
     };
+
     const nProxy = {
         id: uid(),
         name: 'Corp Edge Gateway / Proxy',
         ip: '10.10.1.1',
         type: 'Gateway',
         groupId: gCorp.id,
-        x: 480,
-        y: 400
+        x: 455,
+        y: 398
     };
 
     const nDC = {
@@ -184,21 +204,25 @@ function initDemo() {
         ip: '10.10.5.10',
         type: 'Server',
         groupId: gDC.id,
-        x: 920,
-        y: 160
+        x: 938,
+        y: 159
     };
+
     const nDB = {
         id: uid(),
         name: 'Core Finance & Customer DB',
         ip: '10.10.5.50',
         type: 'Database',
         groupId: gDC.id,
-        x: 920,
-        y: 400
+        x: 938,
+        y: 399
     };
 
     state.nodes.push(nC2, nDropZone, nVictim, nProxy, nDC, nDB);
 
+    // ---------------------------------------------------------
+    // 3. ПОТОКИ ДАННЫХ
+    // ---------------------------------------------------------
     state.edges.push({
         id: uid(),
         from: nVictim.id,
@@ -246,6 +270,13 @@ function initDemo() {
         port: '8443',
         flow: 'Exfiltrated Archive (7z/TLS)'
     });
+
+    // ---------------------------------------------------------
+    // 4. ПАРАМЕТРЫ КАМЕРЫ И ТЕМЫ
+    // ---------------------------------------------------------
+    state.pan = { x: 182, y: 143 };
+    state.scale = 1;
+    state.theme = 'light';
 }
 
 function updateTransform() {
