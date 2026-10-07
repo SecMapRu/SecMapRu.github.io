@@ -1,0 +1,231 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+    <defs>
+        <!-- Градиент фона -->
+        <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#0b1120" />
+            <stop offset="50%" stop-color="#0f172a" />
+            <stop offset="100%" stop-color="#020617" />
+        </linearGradient>
+
+        <!-- Точечная сетка холста -->
+        <pattern id="dotGrid" width="22" height="22" patternUnits="userSpaceOnUse">
+            <circle cx="2" cy="2" r="1.3" fill="#1e293b" />
+        </pattern>
+
+        <!-- Тень окна превью -->
+        <filter id="boxShadow" x="-10%" y="-10%" width="120%" height="120%">
+            <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity="0.6" />
+        </filter>
+
+        <!-- Крупные, чёткие маркеры стрелок с видимым направлением -->
+        <marker id="arrowBlue" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+            <path d="M 1 2 L 11 6 L 1 10 z" fill="#38bdf8" />
+        </marker>
+        <marker id="arrowGreen" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+            <path d="M 1 2 L 11 6 L 1 10 z" fill="#22c55e" />
+        </marker>
+        <marker id="arrowRed" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+            <path d="M 1 2 L 11 6 L 1 10 z" fill="#ef4444" />
+        </marker>
+    </defs>
+
+    <!-- 1. Фон и сетка (без лишних размытых кругов) -->
+    <rect width="1200" height="630" fill="url(#bgGrad)" />
+    <rect width="1200" height="630" fill="url(#dotGrid)" />
+
+    <!-- ======================================================== -->
+    <!-- 2. ЛЕВАЯ КОЛОНКА: БЕЙДЖ, ЗАГОЛОВОК, КНОПКИ              -->
+    <!-- ======================================================== -->
+
+    <!-- Бейдж статуса -->
+    <g transform="translate(64, 58)">
+        <rect width="190" height="28" rx="14" fill="#1e293b" stroke="#334155" stroke-width="1.2" />
+        <circle cx="16" cy="14" r="4" fill="#22c55e" />
+        <text x="28" y="18" fill="#94a3b8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="600" letter-spacing="0.6">ONLINE ИНСТРУМЕНТ</text>
+    </g>
+
+    <!-- Название: SecMap.RU -->
+    <text x="64" y="142" fill="#f8fafc" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="52" font-weight="900" letter-spacing="-1.5">
+        SecMap<tspan fill="#38bdf8">.RU</tspan>
+    </text>
+
+    <!-- Заголовок и подзаголовок -->
+    <text x="64" y="196" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="30" font-weight="700">
+        Конструктор сетевых схем
+    </text>
+    <text x="64" y="234" fill="#94a3b8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="28" font-weight="600">
+        и потоков данных
+    </text>
+
+    <!-- Пояснительный текст -->
+    <text x="64" y="284" fill="#64748b" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="15" font-weight="400">
+        Быстрая визуализация топологии сети и трафика.
+    </text>
+    <text x="64" y="308" fill="#64748b" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="15" font-weight="400">
+        Вся работа только в браузере.
+    </text>
+
+    <!-- Кнопки возможностей (5 штук) -->
+    <g transform="translate(64, 350)">
+        <!-- Ряд 1: CSV импорт, Draw.io, SVG -->
+        <g transform="translate(0, 0)">
+            <rect width="146" height="40" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1.2" />
+            <text x="14" y="25" font-size="15">📥</text>
+            <text x="38" y="25" fill="#f1f5f9" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="600">CSV импорт</text>
+        </g>
+
+        <g transform="translate(158, 0)">
+            <rect width="124" height="40" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1.2" />
+            <text x="14" y="25" font-size="15">📐</text>
+            <text x="38" y="25" fill="#f1f5f9" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="600">Draw.io</text>
+        </g>
+
+        <g transform="translate(294, 0)">
+            <rect width="102" height="40" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1.2" />
+            <text x="14" y="25" font-size="15">🖼️</text>
+            <text x="38" y="25" fill="#f1f5f9" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="600">SVG</text>
+        </g>
+
+        <!-- Ряд 2: Ссылка-шаринг, Анимация потоков -->
+        <g transform="translate(0, 54)">
+            <rect width="170" height="40" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1.2" />
+            <text x="14" y="25" font-size="15">🔗</text>
+            <text x="38" y="25" fill="#f1f5f9" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="600">Ссылка-шаринг</text>
+        </g>
+
+        <g transform="translate(182, 54)">
+            <rect width="192" height="40" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1.2" />
+            <text x="14" y="25" font-size="15">💡</text>
+            <text x="38" y="25" fill="#f1f5f9" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="600">Анимация потоков</text>
+        </g>
+    </g>
+
+    <!-- ======================================================== -->
+    <!-- 3. ПРАВАЯ ЧАСТЬ: ХОЛСТ СХЕМЫ С ЧЁТКИМИ СТРЕЛКАМИ          -->
+    <!-- ======================================================== -->
+    <g transform="translate(506, 54)" filter="url(#boxShadow)">
+        <!-- Рамка окна приложения -->
+        <rect width="644" height="522" rx="12" fill="#0f172a" stroke="#334155" stroke-width="1.5" />
+
+        <!-- Верхняя плашка окна -->
+        <rect width="644" height="34" rx="12" fill="#1e293b" />
+        <rect y="20" width="644" height="14" fill="#1e293b" />
+        <circle cx="18" cy="17" r="4.5" fill="#ef4444" />
+        <circle cx="32" cy="17" r="4.5" fill="#f59e0b" />
+        <circle cx="46" cy="17" r="4.5" fill="#10b981" />
+        <text x="322" y="21" fill="#94a3b8" font-family="monospace" font-size="11" text-anchor="middle">topology_preview.json</text>
+
+        <!-- Сетка внутри холста -->
+        <rect x="1" y="34" width="642" height="486" fill="url(#dotGrid)" />
+
+
+        <g transform="translate(18, 52)">
+            <rect width="144" height="448" rx="8" fill="rgba(239, 68, 68, 0.05)" stroke="#ef4444" stroke-width="1.5" stroke-dasharray="4,4" />
+            <rect width="144" height="24" rx="8" fill="rgba(239, 68, 68, 0.18)" />
+            <text x="8" y="16" fill="#ef4444" font-family="-apple-system, sans-serif" font-size="9" font-weight="bold">External Threat Zone</text>
+
+            <!-- Нода: C2 Server (x: 28..152, y: 120..148, центр y: 134) -->
+            <g transform="translate(10, 68)">
+                <rect width="124" height="28" rx="5" fill="#1e293b" stroke="#ef4444" stroke-width="1.5" />
+                <text x="6" y="18" font-size="11">😈</text>
+                <text x="24" y="18" fill="#f8fafc" font-family="monospace" font-size="9.5">198.51.100.89</text>
+            </g>
+
+            <!-- Нода: Drop Zone (x: 28..152, y: 390..418, центр y: 404) -->
+            <g transform="translate(10, 338)">
+                <rect width="124" height="28" rx="5" fill="#1e293b" stroke="#ef4444" stroke-width="1.5" />
+                <text x="6" y="18" font-size="11">😈</text>
+                <text x="24" y="18" fill="#f8fafc" font-family="monospace" font-size="9.5">203.0.113.44</text>
+            </g>
+        </g>
+
+        <g transform="translate(236, 52)">
+            <!-- Рамка компании -->
+            <rect width="390" height="448" rx="8" fill="rgba(2, 132, 199, 0.04)" stroke="#0284c7" stroke-width="1.5" stroke-dasharray="4,4" />
+            <rect width="390" height="24" rx="8" fill="rgba(2, 132, 199, 0.18)" />
+            <text x="12" y="16" fill="#38bdf8" font-family="-apple-system, sans-serif" font-size="9.5" font-weight="bold">Название вашей компании</text>
+
+            <!-- Подзона: LAN User Segment (x: 248..418) -->
+            <g transform="translate(12, 38)">
+                <rect width="170" height="394" rx="6" fill="rgba(245, 158, 11, 0.05)" stroke="#f59e0b" stroke-width="1.2" stroke-dasharray="3,3" />
+                <text x="8" y="16" fill="#f59e0b" font-family="-apple-system, sans-serif" font-size="9" font-weight="bold">Corporate LAN</text>
+
+                <!-- Нода: Workstation (глобально x: 258..408, y: 120..148) -->
+                <g transform="translate(10, 30)">
+                    <rect width="150" height="28" rx="5" fill="#1e293b" stroke="#f59e0b" stroke-width="2" />
+                    <text x="6" y="18" font-size="11">🖥️</text>
+                    <text x="24" y="18" fill="#f8fafc" font-family="monospace" font-size="9.5">10.10.20.105</text>
+                </g>
+
+                <!-- Нода: Gateway / Proxy (глобально x: 258..408, y: 390..418) -->
+                <g transform="translate(10, 300)">
+                    <rect width="150" height="28" rx="5" fill="#1e293b" stroke="#0284c7" stroke-width="1.2" />
+                    <text x="6" y="18" font-size="11">🌐</text>
+                    <text x="24" y="18" fill="#f8fafc" font-family="monospace" font-size="9.5">10.10.1.1</text>
+                </g>
+            </g>
+
+            <!-- Подзона: Data Center (глобально x: 444..614, зазор 26px) -->
+            <g transform="translate(208, 38)">
+                <rect width="170" height="394" rx="6" fill="rgba(16, 185, 129, 0.05)" stroke="#10b981" stroke-width="1.2" stroke-dasharray="3,3" />
+                <text x="8" y="16" fill="#10b981" font-family="-apple-system, sans-serif" font-size="9" font-weight="bold">Restricted DC</text>
+
+                <!-- Нода: Domain Controller (глобально x: 454..604, y: 120..148) -->
+                <g transform="translate(10, 30)">
+                    <rect width="150" height="28" rx="5" fill="#1e293b" stroke="#0284c7" stroke-width="1.2" />
+                    <text x="6" y="18" font-size="11">🖥️</text>
+                    <text x="24" y="18" fill="#f8fafc" font-family="monospace" font-size="9.5">10.10.5.10</text>
+                </g>
+
+                <!-- Нода: Database (глобально x: 454..604, y: 390..418) -->
+                <g transform="translate(10, 300)">
+                    <rect width="150" height="28" rx="5" fill="#1e293b" stroke="#0284c7" stroke-width="1.2" />
+                    <text x="6" y="18" font-size="11">🗄️</text>
+                    <text x="24" y="18" fill="#f8fafc" font-family="monospace" font-size="9.5">10.10.5.50</text>
+                </g>
+            </g>
+        </g>
+
+
+        <!-- 1. Beacon C2: Workstation (левый край: x=258) -> C2 Server (правый край: x=152) -->
+        <!-- Линия идёт справа налево. Конец стрелки чётко у x=152 -->
+        <path d="M 258 134 L 154 134" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-dasharray="6,4" marker-end="url(#arrowGreen)" />
+        <!-- Плашка поднята над линией (y=108), стрелка полностью видна -->
+        <g transform="translate(178, 108)">
+            <rect width="54" height="18" rx="4" fill="#0b1120" stroke="#22c55e" stroke-width="1" />
+            <text x="27" y="13" fill="#22c55e" font-family="monospace" font-size="9" font-weight="bold" text-anchor="middle">443/C2</text>
+        </g>
+
+        <!-- 2. DCSync: Workstation (правый край: x=408) -> DC (левый край: x=454) -->
+        <!-- Линия слева направо. Конец стрелки чётко у x=452 -->
+        <path d="M 408 134 L 452 134" fill="none" stroke="#38bdf8" stroke-width="2.5" stroke-dasharray="6,4" marker-end="url(#arrowBlue)" />
+        <!-- Плашка поднята над линией (y=108) -->
+        <g transform="translate(414, 108)">
+            <rect width="32" height="18" rx="4" fill="#0b1120" stroke="#38bdf8" stroke-width="1" />
+            <text x="16" y="13" fill="#38bdf8" font-family="monospace" font-size="9" font-weight="bold" text-anchor="middle">445</text>
+        </g>
+
+        <!-- 3. Kerberos: DC (низ: y=148) -> DB (верх: y=390), центр x=529 -->
+        <path d="M 529 148 L 529 388" fill="none" stroke="#38bdf8" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#arrowBlue)" />
+        <g transform="translate(513, 260)">
+            <rect width="32" height="18" rx="4" fill="#0b1120" stroke="#334155" stroke-width="1" />
+            <text x="16" y="13" fill="#38bdf8" font-family="monospace" font-size="9" font-weight="bold" text-anchor="middle">88</text>
+        </g>
+
+        <!-- 4. Proxy Tunnel: Workstation (низ: y=148) -> Gateway (верх: y=390), центр x=333 -->
+        <path d="M 333 148 L 333 388" fill="none" stroke="#38bdf8" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#arrowBlue)" />
+        <g transform="translate(313, 260)">
+            <rect width="40" height="18" rx="4" fill="#0b1120" stroke="#334155" stroke-width="1" />
+            <text x="20" y="13" fill="#38bdf8" font-family="monospace" font-size="9" font-weight="bold" text-anchor="middle">3128</text>
+        </g>
+
+        <!-- 5. Exfiltration: Gateway (левый край: x=258) -> Drop Zone (правый край: x=152) -->
+        <!-- Линия идёт справа налево. Конец стрелки чётко у x=152 -->
+        <path d="M 258 404 L 154 404" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-dasharray="6,4" marker-end="url(#arrowRed)" />
+        <!-- Плашка поднята над линией (y=378) -->
+        <g transform="translate(172, 378)">
+            <rect width="66" height="18" rx="4" fill="#0b1120" stroke="#ef4444" stroke-width="1" />
+            <text x="33" y="13" fill="#ef4444" font-family="monospace" font-size="9" font-weight="bold" text-anchor="middle">8443/TLS</text>
+        </g>
+    </g>
+</svg>
