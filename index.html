@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>SecMap - бесплатный online конструктор потоков данных и сетевых схем</title>
+  <meta name="description" content="Бесплатный онлайн-конструктор сетевых схем и потоков данных. Импорт правил firewall из CSV, экспорт в Draw.io, SVG, JSON. Визуализация топологии сети с анимацией трафика.">
+  <meta name="keywords" content="визуализация сети онлайн, схема firewall, импорт csv draw.io, топология сети, сетевой редактор, конструктор сетевых схем, secmap">
+  <meta property="og:title" content="SecMap — бесплатный конструктор сетевых схем">
+  <meta property="og:description" content="Импортируй правила фаервола из CSV → получай красивую схему с анимацией трафика. Экспорт в Draw.io/SVG/JSON. Работает прямо в браузере.">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="https://secmap.ru/og-image.png">
+  <link rel="canonical" href="https://secmap.ru/">
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<!-- Вертикальный тулбар слева -->
+<div id="toolbar">
+  <button class="btn" id="btn-add-host" title="Новый Хост">
+    <span>🖥️</span><span class="btn-text"> Новый Хост</span>
+  </button>
+  <button class="btn" id="btn-add-group" title="Новая Группа">
+    <span>🔲</span><span class="btn-text"> Новая Группа</span>
+  </button>
+  <button class="btn" id="btn-connect" title="Связать">
+    <span>↔️</span><span class="btn-text"> Связать</span>
+  </button>
+
+  <div class="separator-h"></div>
+  <button class="btn" id="btn-open-import" title="Импорт CSV">
+    <span>📥</span><span class="btn-text"> Импорт CSV</span>
+  </button>
+
+  <div class="separator-h"></div>
+  <button class="btn" id="btn-save-json" title="Сохранить JSON">
+    <span>💾</span><span class="btn-text"> Сохранить...</span>
+  </button>
+  <button class="btn" id="btn-load-json" title="Загрузить JSON">
+    <span>📂</span><span class="btn-text"> Загрузить</span>
+  </button>
+  <input type="file" id="json-file-input" accept=".json" style="display:none;">
+
+  <button class="btn" id="btn-share-url" title="Скопировать ссылку на схему">
+    <span id="btn-share-icon">🔗</span><span class="btn-text" id="btn-share-text"> Ссылка</span>
+  </button>
+
+  <div class="separator-h"></div>
+  <button class="btn" id="btn-toggle-theme" title="Сменить тему">
+    <span id="theme-icon">🌓</span><span class="btn-text" id="theme-text"> Тема</span>
+  </button>
+  <button class="btn" id="btn-toggle-flow" title="Анимация трафика">
+    <span id="flow-icon">💡</span><span class="btn-text" id="flow-text"> Вкл.</span>
+  </button>
+
+  <div class="separator-h"></div>
+  <div class="zoom-group">
+    <button class="btn" id="btn-zoom-in" title="Приблизить">➕</button>
+    <button class="btn" id="btn-zoom-reset" title="Сбросить масштаб">100%</button>
+    <button class="btn" id="btn-zoom-out" title="Отдалить">➖</button>
+  </div>
+
+  <div class="separator-h"></div>
+  <button class="btn" id="btn-export-svg" title="Экспорт в SVG">
+    <span>🖼️</span><span class="btn-text"> В SVG</span>
+  </button>
+  <button class="btn" id="btn-export-drawio" title="Экспорт в Draw.io">
+    <span>📐</span><span class="btn-text"> В Draw.io</span>
+  </button>
+
+  <div class="separator-h" style="margin-top:auto;"></div>
+
+  <button class="btn btn-danger has-tooltip" id="btn-clear-all" title="Стереть всё" data-tooltip="Стереть всё: очищает всю карту, удаляя все хосты, связи и группы">
+    <span>🧹</span><span class="btn-text"> Стереть всё</span>
+  </button>
+</div>
+
+<!--&lt;!&ndash; Верхний баннер &ndash;&gt;-->
+<!--<div id="banner-top">-->
+<!--  <span>Здесь могла быть ваша реклама</span>-->
+<!--</div>-->
+
+<!-- Правый баннер -->
+<!--<div id="banner-right">-->
+<!--  <span>Здесь могла быть ваша реклама</span>-->
+<!--</div>-->
+
+<!-- Холст -->
+<div id="canvas-container">
+  <div id="viewport">
+    <div id="groups-container"></div>
+    <svg id="edges-layer">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path id="arrow-path" d="M 0 1 L 10 5 L 0 9 z" fill="#2563eb" />
+        </marker>
+      </defs>
+    </svg>
+    <div id="nodes-container"></div>
+  </div>
+</div>
+
+<!-- Сайдбар параметров -->
+<div id="sidebar">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
+    <h3 id="sidebar-title" style="font-size: 13px;">Параметры</h3>
+    <button class="btn" id="btn-close-sidebar" style="padding: 1px 5px; width:auto;">✕</button>
+  </div>
+  <div id="sidebar-content"></div>
+</div>
+
+<!-- Модальное окно CSV -->
+<div id="modal-overlay">
+  <div class="modal-box">
+    <h3 style="font-size: 15px;">Импорт потоков (CSV)</h3>
+    <p style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+      Формат: <code>src_ip;dst_ip;dst_port;comment</code>
+    </p>
+    <textarea id="import-text" placeholder="10.0.0.1;10.0.0.2;80;HTTP&#10;10.0.0.1;10.0.0.2;443;HTTPS&#10;10.0.0.2;10.0.1.5;5432;Postgres"></textarea>
+    <div style="display:flex; justify-content:flex-end; gap: 6px;">
+      <button class="btn" id="btn-cancel-import" style="width:auto;">Отмена</button>
+      <button class="btn active" id="btn-run-import" style="width:auto;">Импортировать</button>
+    </div>
+  </div>
+</div>
+
+<div id="help-overlay">
+  SecMap - инструмент, позволяющий быстро и просто отрисовать схему потоков данных и выгрузить ее в популярные форматы, либо просто поделиться с коллегами, друзьями.<br>Вся работа происходит исключительно в браузере, а на сервер ничего не передается.
+</div>
+
+<script src="assets/main.js"></script>
+
+<!-- Yandex.Metrika counter -->
+<script type="text/javascript">
+  (function(m,e,t,r,i,k,a){
+    m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
+    m[i].l=1*new Date();
+    for (var j = 0; j < document.scripts.length; j++) {if (document.scripts[j].src === r) { return; }}
+    k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)
+  })(window, document,'script','https://mc.yandex.ru/metrika/tag.js?id=113487236', 'ym');
+
+  ym(113487236, 'init', {ssr:true, clickmap:true, referrer: document.referrer, url: location.href, accurateTrackBounce:true, trackLinks:true});
+</script>
+<noscript><div><img src="https://mc.yandex.ru/watch/113487236" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
+<!-- /Yandex.Metrika counter -->
+
+
+</body>
+</html>
