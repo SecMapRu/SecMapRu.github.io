@@ -1,21 +1,24 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <!-- Фон: Щит информационной безопасности -->
-  <path d="M32 4 L54 13 C54 36 32 58 32 60 C32 58 10 36 10 13 Z" 
-        fill="#0284c7" />
-  
-  <!-- Внутренний акцентный контур щита -->
-  <path d="M32 9 L49 17 C49 35 32 52 32 54 C32 52 15 35 15 17 Z" 
-        fill="#0369a1" />
-
-  <!-- Линии сетевых связей (топология) -->
-  <line x1="32" y1="21" x2="22" y2="38" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
-  <line x1="32" y1="21" x2="42" y2="38" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
-  <line x1="22" y1="38" x2="42" y2="38" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
-
-  <!-- Нижние узлы сети (клиенты/серверы) -->
-  <circle cx="22" cy="38" r="4.5" fill="#ffffff" />
-  <circle cx="42" cy="38" r="4.5" fill="#ffffff" />
-
-  <!-- Центральный/Верхний узел (шлюз / защищенный узел) -->
-  <circle cx="32" cy="21" r="5.5" fill="#22c55e" stroke="#ffffff" stroke-width="2" />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <defs>
+    <linearGradient id="flowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#22c55e" />
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="7" fill="#0b1120" />
+  <path d="M 16 4.5 L 25.5 8.5 V 15 C 25.5 21 21 25.5 16 27.5 C 11 25.5 6.5 21 6.5 15 V 8.5 Z"
+        fill="#0f172a"
+        stroke="#0284c7"
+        stroke-width="1.5"
+        stroke-linejoin="round" />
+  <path d="M 11 19 L 16 11 L 21 19"
+        fill="none"
+        stroke="url(#flowGrad)"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round" />
+  <circle cx="16" cy="11" r="2.8" fill="#38bdf8" />
+  <circle cx="16" cy="11" r="1.2" fill="#0b1120" />
+  <circle cx="11" cy="19" r="2" fill="#22c55e" />
+  <circle cx="21" cy="19" r="2" fill="#38bdf8" />
 </svg>
