@@ -1724,8 +1724,18 @@ function zoomOut() {
 }
 
 function zoomReset() {
-    state.scale = 1;
-    state.pan = { x: 0, y: 0 };
+    const prevScale = state.scale;
+    const targetScale = 1;
+
+    // Центр видимой области холста
+    const centerX = container.clientWidth / 2;
+    const centerY = container.clientHeight / 2;
+
+    // Пересчитываем pan так, чтобы центр экрана остался на тех же мировых координатах
+    state.pan.x = centerX - (centerX - state.pan.x) * (targetScale / prevScale);
+    state.pan.y = centerY - (centerY - state.pan.y) * (targetScale / prevScale);
+    state.scale = targetScale;
+
     updateTransform();
     scheduleSave();
 }
