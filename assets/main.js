@@ -30,11 +30,26 @@ const sidebar = document.getElementById('sidebar');
 const sidebarContent = document.getElementById('sidebar-content');
 const sidebarTitle = document.getElementById('sidebar-title');
 const selectionBox = document.getElementById('selection-box');
+const exportDropdown = document.getElementById('export-dropdown');
+const btnExportMenu = document.getElementById('btn-export-menu');
+const importDropdown = document.getElementById('import-dropdown');
+const btnImportMenu = document.getElementById('btn-import-menu');
 
 const domNodes = new Map();
 const domGroups = new Map();
 
 const uid = () => '_' + Math.random().toString(36).substr(2, 9);
+
+function escapeHtml(unsafe) {
+    if (!unsafe) return '';
+    return unsafe.toString().replace(/[<>&'"]/g, c => ({
+        '<': '&lt;',
+        '>': '&gt;',
+        '&': '&amp;',
+        '\'': '&#39;',
+        '"': '&quot;'
+    }[c]));
+}
 
 function applyTheme(theme) {
     state.theme = theme;
@@ -102,9 +117,6 @@ function loadSavedState() {
 }
 
 function initDemo() {
-    // ---------------------------------------------------------
-    // 1. ЗОНЫ / ГРУППЫ СЕТИ
-    // ---------------------------------------------------------
     const gExternal = {
         id: uid(),
         parentGroupId: null,
@@ -155,9 +167,6 @@ function initDemo() {
 
     state.groups.push(gExternal, gCompany, gCorp, gDC);
 
-    // ---------------------------------------------------------
-    // 2. УЗЛЫ / ХОСТЫ
-    // ---------------------------------------------------------
     const nC2 = {
         id: uid(),
         name: 'Attacker C2 Server',
@@ -220,9 +229,6 @@ function initDemo() {
 
     state.nodes.push(nC2, nDropZone, nVictim, nProxy, nDC, nDB);
 
-    // ---------------------------------------------------------
-    // 3. ПОТОКИ ДАННЫХ
-    // ---------------------------------------------------------
     state.edges.push({
         id: uid(),
         from: nVictim.id,
@@ -271,9 +277,6 @@ function initDemo() {
         flow: 'Exfiltrated Archive (7z/TLS)'
     });
 
-    // ---------------------------------------------------------
-    // 4. ПАРАМЕТРЫ КАМЕРЫ И ТЕМЫ
-    // ---------------------------------------------------------
     state.pan = { x: 182, y: 143 };
     state.scale = 1;
     state.theme = 'light';
@@ -307,7 +310,6 @@ container.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;
     const isTargetCanvas = (e.target === container || e.target === viewport || e.target === edgesLayer);
 
-    // Прямоугольное выделение рамкой (Shift/Ctrl/Meta + ЛКМ по холсту)
     if (isTargetCanvas && (e.shiftKey || e.ctrlKey || e.metaKey)) {
         state.isMarqueeSelecting = true;
         state.marqueeStart = { x: e.clientX, y: e.clientY };
@@ -511,7 +513,7 @@ function syncNodesDOM() {
         el.className = `node-element ${n.type === 'Malicious' ? 'malicious' : ''} ${isSelected ? 'selected' : ''} ${state.isConnecting && state.connectSourceId === n.id ? 'connecting-source' : ''}`;
 
         el.innerHTML = `
-          <span>${icon}</span><span class="node-text">${n.ip || n.name}</span>
+          <span>${icon}</span><span class="node-text">${escapeHtml(n.ip || n.name)}</span>
           <div class="quick-port port-right" data-dir="right" title="Создать связь вправо">+</div>
           <div class="quick-port port-left" data-dir="left" title="Создать связь влево">+</div>
           <div class="quick-port port-top" data-dir="top" title="Создать связь вверх">+</div>
@@ -595,7 +597,7 @@ function syncGroupsDOM() {
 
         el.innerHTML = `
           <div class="group-header">
-            <span>🔲 ${g.name} ${g.collapsed ? '*' : ''}</span>
+            <span>🔲 ${escapeHtml(g.name)} ${g.collapsed ? '*' : ''}</span>
             <button class="collapse-btn">${g.collapsed ? 'Развернуть' : 'Свернуть'}</button>
           </div>
           ${!g.collapsed ? `
@@ -1034,12 +1036,10 @@ function enableNodeDrag(el, node) {
     const startDrag = (clientX, clientY, isMultiModifier = false) => {
         if (state.isConnecting) return;
 
-        // Если зажат модификатор (Shift/Ctrl/Cmd), перетаскивание не запускаем, давая сработать клику
         if (isMultiModifier) {
             return;
         }
 
-        // Если кликнули по ноде, которая ещё не в выделении, делаем её единственной выделенной
         if (!state.selectedNodes.has(node.id)) {
             selectItem('node', node.id, false);
         }
@@ -1287,9 +1287,8 @@ function enableGroupDrag(el, group) {
             ev.preventDefault();
             moveDrag(ev.touches[0].clientX, ev.touches[0].clientY);
         };
-        const onTouchEnd = (ev) => {
+        const onTouchEnd = () => {
             if (isDragging) {
-                ev.stopPropagation();
                 endDrag();
             }
             window.removeEventListener('touchmove', onTouchMove);
@@ -1458,12 +1457,12 @@ function renderSingleNodeSidebar(id) {
     sidebarTitle.innerText = 'Хост';
     let groupOptions = `<option value="">-- Без группы (Свободный) --</option>`;
     state.groups.forEach(g => {
-        groupOptions += `<option value="${g.id}" ${node.groupId === g.id ? 'selected' : ''}>${g.name}</option>`;
+        groupOptions += `<option value="${g.id}" ${node.groupId === g.id ? 'selected' : ''}>${escapeHtml(g.name)}</option>`;
     });
 
     sidebarContent.innerHTML = `
-      <div class="form-group"><label>Имя</label><input type="text" id="prop-name" value="${node.name}"></div>
-      <div class="form-group"><label>IP Адрес</label><input type="text" id="prop-ip" value="${node.ip || ''}"></div>
+      <div class="form-group"><label>Имя</label><input type="text" id="prop-name" value="${escapeHtml(node.name)}"></div>
+      <div class="form-group"><label>IP Адрес</label><input type="text" id="prop-ip" value="${escapeHtml(node.ip || '')}"></div>
       <div class="form-group"><label>Привязка к группе</label><select id="prop-group">${groupOptions}</select></div>
       <div class="form-group"><label>Тип</label><select id="prop-type">
         <option value="Host" ${node.type==='Host'?'selected':''}>Обычный хост (Host)</option>
@@ -1496,8 +1495,8 @@ function renderSingleEdgeSidebar(id) {
     if (!edge) return;
     sidebarTitle.innerText = 'Связь (Поток)';
     sidebarContent.innerHTML = `
-      <div class="form-group"><label>Порт назначения (dst_port)</label><input type="text" id="prop-port" value="${edge.port || ''}"></div>
-      <div class="form-group"><label>Назначение (comment)</label><input type="text" id="prop-flow" value="${edge.flow || ''}"></div>
+      <div class="form-group"><label>Порт назначения (dst_port)</label><input type="text" id="prop-port" value="${escapeHtml(edge.port || '')}"></div>
+      <div class="form-group"><label>Назначение (comment)</label><input type="text" id="prop-flow" value="${escapeHtml(edge.flow || '')}"></div>
       <button class="btn btn-danger sidebar-delete-btn" id="sidebar-delete-action">🗑️ Удалить эту связь [Del]</button>
     `;
     document.getElementById('prop-port').oninput = (e) => { edge.port = e.target.value; renderEdges(); scheduleSave(); };
@@ -1513,12 +1512,12 @@ function renderSingleGroupSidebar(id) {
     let parentOptions = `<option value="">-- Корневой уровень (без родителя) --</option>`;
     state.groups.forEach(g => {
         if (g.id !== group.id && !isDescendantGroup(g.id, group.id)) {
-            parentOptions += `<option value="${g.id}" ${group.parentGroupId === g.id ? 'selected' : ''}>${g.name}</option>`;
+            parentOptions += `<option value="${g.id}" ${group.parentGroupId === g.id ? 'selected' : ''}>${escapeHtml(g.name)}</option>`;
         }
     });
 
     sidebarContent.innerHTML = `
-      <div class="form-group"><label>Название</label><input type="text" id="prop-gname" value="${group.name}"></div>
+      <div class="form-group"><label>Название</label><input type="text" id="prop-gname" value="${escapeHtml(group.name)}"></div>
       <div class="form-group"><label>Цвет группы</label><input type="color" id="prop-gcolor" value="${group.color || '#0284c7'}"></div>
       <div class="form-group"><label>Родительская группа</label><select id="prop-gparent">${parentOptions}</select></div>
       <div class="form-group"><label>Ширина (px)</label><input type="number" id="prop-gw" value="${group.width}"></div>
@@ -1555,7 +1554,7 @@ function renderMultiSelectSidebar(counts) {
 
     let groupOptions = `<option value="">-- Без изменений --</option><option value="__ROOT__">-- В корень (убрать из групп) --</option>`;
     state.groups.forEach(g => {
-        groupOptions += `<option value="${g.id}">${g.name}</option>`;
+        groupOptions += `<option value="${g.id}">${escapeHtml(g.name)}</option>`;
     });
 
     let batchActionsHtml = `
@@ -1634,7 +1633,6 @@ function toggleConnectMode() {
     state.isConnecting = !state.isConnecting;
 
     if (state.isConnecting) {
-        // Если перед включением уже был выбран ровно один хост, он становится источником
         if (state.selectedNodes.size === 1) {
             state.connectSourceId = Array.from(state.selectedNodes)[0];
         } else {
@@ -1723,15 +1721,14 @@ function zoomOut() {
     scheduleSave();
 }
 
+// Плавный возврат масштаба к 100% с центрированием видимой области
 function zoomReset() {
     const prevScale = state.scale;
     const targetScale = 1;
 
-    // Центр видимой области холста
     const centerX = container.clientWidth / 2;
     const centerY = container.clientHeight / 2;
 
-    // Пересчитываем pan так, чтобы центр экрана остался на тех же мировых координатах
     state.pan.x = centerX - (centerX - state.pan.x) * (targetScale / prevScale);
     state.pan.y = centerY - (centerY - state.pan.y) * (targetScale / prevScale);
     state.scale = targetScale;
@@ -1760,6 +1757,14 @@ window.addEventListener('keydown', (e) => {
     const isTyping = targetTag === 'input' || targetTag === 'textarea' || targetTag === 'select' || e.target.isContentEditable;
 
     if (e.key === 'Escape') {
+        if (exportDropdown && exportDropdown.classList.contains('active')) {
+            closeExportDropdown();
+            return;
+        }
+        if (importDropdown && importDropdown.classList.contains('active')) {
+            closeImportDropdown();
+            return;
+        }
         if (modal.classList.contains('active')) {
             modal.classList.remove('active');
             return;
@@ -1815,7 +1820,115 @@ window.addEventListener('keydown', (e) => {
     }
 });
 
+// ==========================================
+// ЛОГИКА ВЫПАДАЮЩИХ МЕНЮ (FIXED OVERLAY)
+// ==========================================
+function positionDropdown(triggerBtn, dropdownEl) {
+    if (!triggerBtn || !dropdownEl) return;
+    const rect = triggerBtn.getBoundingClientRect();
+    const dropdownWidth = 250;
+    const margin = 8;
+
+    let left = rect.right + margin;
+    let top = rect.top;
+
+    if (window.innerWidth <= 768) {
+        left = Math.max(8, rect.left);
+        top = Math.min(window.innerHeight - 260, rect.bottom + margin);
+    } else {
+        if (left + dropdownWidth > window.innerWidth) {
+            left = rect.left - dropdownWidth - margin;
+        }
+        const estimatedHeight = 220;
+        if (top + estimatedHeight > window.innerHeight) {
+            top = Math.max(12, window.innerHeight - estimatedHeight - 12);
+        }
+    }
+
+    dropdownEl.style.left = `${Math.round(left)}px`;
+    dropdownEl.style.top = `${Math.round(top)}px`;
+}
+
+// Экспорт
+function openExportDropdown() {
+    closeImportDropdown();
+    positionDropdown(btnExportMenu, exportDropdown);
+    exportDropdown.classList.add('active');
+    btnExportMenu.classList.add('active');
+}
+
+function closeExportDropdown() {
+    if (!exportDropdown) return;
+    exportDropdown.classList.remove('active');
+    btnExportMenu.classList.remove('active');
+}
+
+btnExportMenu.onclick = (e) => {
+    e.stopPropagation();
+    if (exportDropdown.classList.contains('active')) {
+        closeExportDropdown();
+    } else {
+        openExportDropdown();
+    }
+};
+
+// Импорт
+function openImportDropdown() {
+    closeExportDropdown();
+    positionDropdown(btnImportMenu, importDropdown);
+    importDropdown.classList.add('active');
+    btnImportMenu.classList.add('active');
+}
+
+function closeImportDropdown() {
+    if (!importDropdown) return;
+    importDropdown.classList.remove('active');
+    btnImportMenu.classList.remove('active');
+}
+
+if (btnImportMenu) {
+    btnImportMenu.onclick = (e) => {
+        e.stopPropagation();
+        if (importDropdown.classList.contains('active')) {
+            closeImportDropdown();
+        } else {
+            openImportDropdown();
+        }
+    };
+}
+
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('#export-dropdown') && !e.target.closest('#btn-export-menu')) {
+        closeExportDropdown();
+    }
+    if (!e.target.closest('#import-dropdown') && !e.target.closest('#btn-import-menu')) {
+        closeImportDropdown();
+    }
+});
+
+window.addEventListener('resize', () => {
+    if (exportDropdown && exportDropdown.classList.contains('active')) {
+        positionDropdown(btnExportMenu, exportDropdown);
+    }
+    if (importDropdown && importDropdown.classList.contains('active')) {
+        positionDropdown(btnImportMenu, importDropdown);
+    }
+});
+
+const toolbarEl = document.getElementById('toolbar');
+if (toolbarEl) {
+    toolbarEl.addEventListener('scroll', () => {
+        if (exportDropdown && exportDropdown.classList.contains('active')) {
+            positionDropdown(btnExportMenu, exportDropdown);
+        }
+        if (importDropdown && importDropdown.classList.contains('active')) {
+            positionDropdown(btnImportMenu, importDropdown);
+        }
+    });
+}
+
 document.getElementById('btn-save-json').onclick = () => {
+    closeExportDropdown();
     const data = JSON.stringify({
         version: 8,
         nodes: state.nodes,
@@ -1829,6 +1942,7 @@ document.getElementById('btn-save-json').onclick = () => {
 };
 
 document.getElementById('btn-load-json').onclick = () => {
+    closeImportDropdown();
     document.getElementById('json-file-input').click();
 };
 
@@ -1861,7 +1975,10 @@ document.getElementById('json-file-input').onchange = (e) => {
 };
 
 const modal = document.getElementById('modal-overlay');
-document.getElementById('btn-open-import').onclick = () => modal.classList.add('active');
+document.getElementById('btn-open-import').onclick = () => {
+    closeImportDropdown();
+    modal.classList.add('active');
+};
 document.getElementById('btn-cancel-import').onclick = () => modal.classList.remove('active');
 
 document.getElementById('btn-run-import').onclick = () => {
@@ -2003,11 +2120,6 @@ document.getElementById('btn-run-import').onclick = () => {
     scheduleSave();
 };
 
-function escapeXml(unsafe) {
-    if (!unsafe) return '';
-    return unsafe.toString().replace(/[<>&'"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','\'':'&apos;','"':'&quot;'}[c]));
-}
-
 function downloadBlob(content, filename, contentType) {
     const blob = new Blob([content], { type: contentType });
     const url = URL.createObjectURL(blob);
@@ -2020,7 +2132,10 @@ function downloadBlob(content, filename, contentType) {
     URL.revokeObjectURL(url);
 }
 
-document.getElementById('btn-export-svg').onclick = () => {
+// ==========================================
+// ГЕНЕРАТОР SVG СТРОКИ (ОБЩИЙ ДЛЯ SVG И PNG)
+// ==========================================
+function generateSvgExportString() {
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     state.groups.forEach(g => {
         minX = Math.min(minX, g.x); minY = Math.min(minY, g.y);
@@ -2031,7 +2146,7 @@ document.getElementById('btn-export-svg').onclick = () => {
         minX = Math.min(minX, box.x); minY = Math.min(minY, box.y);
         maxX = Math.max(maxX, box.x + box.w + 15); maxY = Math.max(maxY, box.y + box.h + 8);
     });
-    if (minX === Infinity) return alert('Карта пуста');
+    if (minX === Infinity) return null;
 
     const p = 40;
     minX -= p; minY -= p;
@@ -2050,9 +2165,9 @@ document.getElementById('btn-export-svg').onclick = () => {
 
     sortedGroups.forEach(g => {
         const gh = g.collapsed ? 36 : g.height;
-        const col = g.color || '#0284c7';
+        const col = /^#[0-9a-fA-F]{3,8}$/.test(g.color) ? g.color : '#0284c7';
         svg += `<rect x="${g.x}" y="${g.y}" width="${g.width}" height="${gh}" rx="8" fill="${hexToRgba(col, 0.06)}" stroke="${col}" stroke-dasharray="${g.collapsed?'0':'4,4'}" />\n`;
-        svg += `<text x="${g.x+10}" y="${g.y+22}" fill="${col}" font-family="sans-serif" font-size="12" font-weight="bold">${escapeXml(g.name)} ${g.collapsed?'(свернуто)':''}</text>\n`;
+        svg += `<text x="${g.x+10}" y="${g.y+22}" fill="${col}" font-family="sans-serif" font-size="12" font-weight="bold">${escapeHtml(g.name)} ${g.collapsed?'(свернуто)':''}</text>\n`;
     });
 
     const pairMap = new Map();
@@ -2079,7 +2194,7 @@ document.getElementById('btn-export-svg').onclick = () => {
             if (lbl) {
                 const tw = Math.max(50, Math.ceil(lbl.length * 7.8) + 16);
                 svg += `<rect x="${geom.labelX - tw/2}" y="${geom.labelY - 10}" width="${tw}" height="20" rx="4" fill="${nodeCol}" stroke="#cbd5e1" />\n`;
-                svg += `<text x="${geom.labelX}" y="${geom.labelY + 4}" fill="${textCol}" font-family="monospace" font-size="10" text-anchor="middle">${escapeXml(lbl)}</text>\n`;
+                svg += `<text x="${geom.labelX}" y="${geom.labelY + 4}" fill="${textCol}" font-family="monospace" font-size="10" text-anchor="middle">${escapeHtml(lbl)}</text>\n`;
             }
         });
     });
@@ -2099,17 +2214,72 @@ document.getElementById('btn-export-svg').onclick = () => {
                 <circle cx="3" cy="3" r="0.5" fill="${strokeColor}"/>
                 <circle cx="3" cy="11" r="0.5" fill="${strokeColor}"/>
             </g>\n`;
-            svg += `<text x="${n.x + 26}" y="${n.y + 18}" fill="${textCol}" font-family="monospace" font-size="11">${escapeXml(n.ip || n.name)}</text>\n`;
+            svg += `<text x="${n.x + 26}" y="${n.y + 18}" fill="${textCol}" font-family="monospace" font-size="11">${escapeHtml(n.ip || n.name)}</text>\n`;
         } else {
-            svg += `<text x="${n.x + 8}" y="${n.y + 18}" fill="${textCol}" font-family="monospace" font-size="11">${icon} ${escapeXml(n.ip || n.name)}</text>\n`;
+            svg += `<text x="${n.x + 8}" y="${n.y + 18}" fill="${textCol}" font-family="monospace" font-size="11">${icon} ${escapeHtml(n.ip || n.name)}</text>\n`;
         }
     });
 
     svg += '</svg>';
-    downloadBlob(svg, 'topology.svg', 'image/svg+xml');
+    return { svg, width: w, height: h };
+}
+
+document.getElementById('btn-export-svg').onclick = () => {
+    closeExportDropdown();
+    const result = generateSvgExportString();
+    if (!result) return alert('Карта пуста');
+    downloadBlob(result.svg, 'topology.svg', 'image/svg+xml');
+};
+
+// ==========================================
+// ЭКСПОРТ В PNG ЧЕРЕЗ CANVAS (HiDPI / Retina 2x)
+// ==========================================
+document.getElementById('btn-export-png').onclick = () => {
+    closeExportDropdown();
+    const result = generateSvgExportString();
+    if (!result) return alert('Карта пуста');
+
+    const svgBlob = new Blob([result.svg], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(svgBlob);
+    const img = new Image();
+
+    img.onload = () => {
+        const scaleFactor = 2; // Ретина-качество
+        const canvas = document.createElement('canvas');
+        canvas.width = result.width * scaleFactor;
+        canvas.height = result.height * scaleFactor;
+
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.scale(scaleFactor, scaleFactor);
+
+        ctx.drawImage(img, 0, 0);
+        URL.revokeObjectURL(url);
+
+        canvas.toBlob((blob) => {
+            if (!blob) return alert('Ошибка создания PNG');
+            const pngUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = pngUrl;
+            a.download = 'network_topology.png';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(pngUrl);
+        }, 'image/png');
+    };
+
+    img.onerror = () => {
+        URL.revokeObjectURL(url);
+        alert('Не удалось преобразовать схему в PNG');
+    };
+
+    img.src = url;
 };
 
 document.getElementById('btn-export-drawio').onclick = () => {
+    closeExportDropdown();
     let cells = `
         <mxCell id="0" />
         <mxCell id="1" parent="0" />`;
@@ -2124,7 +2294,7 @@ document.getElementById('btn-export-drawio').onclick = () => {
 
     sortedGroups.forEach(g => {
         const gh = g.collapsed ? 36 : g.height;
-        const col = g.color || '#0284c7';
+        const col = /^#[0-9a-fA-F]{3,8}$/.test(g.color) ? g.color : '#0284c7';
         const parentId = g.parentGroupId ? g.parentGroupId : '1';
 
         let relX = g.x;
@@ -2139,7 +2309,7 @@ document.getElementById('btn-export-drawio').onclick = () => {
 
         const style = `swimlane;whiteSpace=wrap;html=1;dashed=${g.collapsed ? 0 : 1};fillColor=${nodeCol};strokeColor=${col};fontColor=${col};startSize=26;rounded=1;arcSize=8;`;
         cells += `
-        <mxCell id="${g.id}" value="${escapeXml(g.name)}" style="${style}" vertex="1" parent="${parentId}">
+        <mxCell id="${g.id}" value="${escapeHtml(g.name)}" style="${style}" vertex="1" parent="${parentId}">
           <mxGeometry x="${relX}" y="${relY}" width="${g.width}" height="${gh}" as="geometry" />
         </mxCell>`;
     });
@@ -2147,7 +2317,7 @@ document.getElementById('btn-export-drawio').onclick = () => {
     state.nodes.forEach(n => {
         const box = getNodeBox(n);
         const iconSymbol = n.type === 'Server' ? '🖴' : getNodeIcon(n.type);
-        const lbl = `${iconSymbol} ${escapeXml(n.ip || n.name)}`;
+        const lbl = `${iconSymbol} ${escapeHtml(n.ip || n.name)}`;
         const stroke = n.type === 'Malicious' ? '#ef4444' : '#0284c7';
         const parentId = n.groupId ? n.groupId : '1';
 
@@ -2177,7 +2347,7 @@ document.getElementById('btn-export-drawio').onclick = () => {
 
     pairMap.forEach(edges => {
         edges.forEach((e, idx) => {
-            const lbl = `${e.port ? '[' + escapeXml(e.port) + ']&#xa;' : ''}${escapeXml(e.flow || '')}`;
+            const lbl = `${e.port ? '[' + escapeHtml(e.port) + ']&#xa;' : ''}${escapeHtml(e.flow || '')}`;
             const exitY = edges.length === 1 ? 0.5 : (idx + 1) / (edges.length + 1);
             const entryY = exitY;
             const style = `edgeStyle=orthogonalEdgeStyle;curved=1;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=${edgeCol};fontColor=${textCol};labelBackgroundColor=${nodeCol};endArrow=block;endFill=1;exitX=1;exitY=${exitY};entryX=0;entryY=${entryY};`;
@@ -2417,9 +2587,14 @@ async function startApp() {
     state.groups = [];
     state.edges = [];
     initDemo();
-    applyTheme('light');
+    applyTheme(state.theme || 'light');
     updateTransform();
     render();
 }
 
 startApp();
+
+
+
+
+// 2600

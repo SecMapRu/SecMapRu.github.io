@@ -4,19 +4,16 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>SecMap - бесплатный online конструктор потоков данных и сетевых схем</title>
-  <meta name="description" content="Бесплатный онлайн-конструктор сетевых схем и потоков данных. Импорт правил firewall из CSV, экспорт в Draw.io, SVG, JSON. Визуализация топологии сети с анимацией трафика.">
-  <meta name="keywords" content="визуализация сети онлайн, схема firewall, импорт csv draw.io, топология сети, сетевой редактор, конструктор сетевых схем, secmap">
+  <meta name="description" content="Бесплатный онлайн-конструктор сетевых схем и потоков данных. Импорт правил firewall из CSV, экспорт в PNG, SVG, Draw.io, JSON. Визуализация топологии сети с анимацией трафика.">
+  <meta name="keywords" content="визуализация сети онлайн, схема firewall, импорт csv draw.io, экспорт png svg, топология сети, конструктор сетевых схем, secmap">
   <meta property="og:title" content="SecMap — бесплатный конструктор сетевых схем">
-  <meta property="og:description" content="Импортируй правила фаервола из CSV → получай красивую схему с анимацией трафика. Экспорт в Draw.io/SVG/JSON. Работает прямо в браузере.">
+  <meta property="og:description" content="Импортируй правила фаервола из CSV → получай красивую схему с анимацией трафика. Экспорт в PNG/SVG/Draw.io/JSON. Работает прямо в браузере.">
   <meta property="og:type" content="website">
-  <meta property="og:image" content="https://secmap.ru/og-image-dark.png">
-  <link rel="canonical" href="https://secmap.ru/">
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
   <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
 
-<!-- Вертикальный тулбар слева -->
 <div id="toolbar">
   <button class="btn" id="btn-add-host" title="Новый Хост [H]">
     <span>🖥️</span><span class="btn-text"> Новый Хост</span>
@@ -29,19 +26,69 @@
   </button>
 
   <div class="separator-h"></div>
-  <button class="btn" id="btn-open-import" title="Импорт CSV">
-    <span>📥</span><span class="btn-text"> Импорт CSV</span>
-  </button>
 
-  <div class="separator-h"></div>
-  <button class="btn" id="btn-save-json" title="Сохранить JSON">
-    <span>💾</span><span class="btn-text"> Сохранить...</span>
-  </button>
-  <button class="btn" id="btn-load-json" title="Загрузить JSON">
-    <span>📂</span><span class="btn-text"> Загрузить</span>
-  </button>
+  <div class="dropdown-wrapper">
+    <button class="btn" id="btn-import-menu" title="Импорт и открытие схемы">
+      <span>📥</span><span class="btn-text"> Импорт ▾</span>
+    </button>
+    <div class="dropdown-menu" id="import-dropdown">
+      <button class="dropdown-item" id="btn-open-import">
+        <span class="item-icon">📊</span>
+        <span class="item-text">
+          <strong>Импорт из CSV</strong>
+          <small>src_ip;dst_ip;port;comment</small>
+        </span>
+      </button>
+      <div class="dropdown-separator"></div>
+      <button class="dropdown-item" id="btn-load-json">
+        <span class="item-icon">📂</span>
+        <span class="item-text">
+          <strong>Загрузить JSON</strong>
+          <small>Открыть файл проекта</small>
+        </span>
+      </button>
+    </div>
+  </div>
   <input type="file" id="json-file-input" accept=".json" style="display:none;">
 
+  <div class="dropdown-wrapper">
+    <button class="btn" id="btn-export-menu" title="Экспорт схемы">
+      <span>📤</span><span class="btn-text"> Экспорт ▾</span>
+    </button>
+    <div class="dropdown-menu" id="export-dropdown">
+      <button class="dropdown-item" id="btn-export-png">
+        <span class="item-icon">🖼️</span>
+        <span class="item-text">
+          <strong>Изображение PNG</strong>
+          <small>Высокое качество</small>
+        </span>
+      </button>
+      <button class="dropdown-item" id="btn-export-svg">
+        <span class="item-icon">🎨</span>
+        <span class="item-text">
+          <strong>Векторный SVG</strong>
+          <small>Идеально для масштабирования</small>
+        </span>
+      </button>
+      <button class="dropdown-item" id="btn-export-drawio">
+        <span class="item-icon">📐</span>
+        <span class="item-text">
+          <strong>Схема Draw.io</strong>
+          <small>Для diagrams.net (.drawio)</small>
+        </span>
+      </button>
+      <div class="dropdown-separator"></div>
+      <button class="dropdown-item" id="btn-save-json">
+        <span class="item-icon">💾</span>
+        <span class="item-text">
+          <strong>Файл проекта JSON</strong>
+          <small>Просто сделаем бэкап</small>
+        </span>
+      </button>
+    </div>
+  </div>
+
+  <div class="separator-h"></div>
   <button class="btn" id="btn-share-url" title="Скопировать ссылку на схему">
     <span id="btn-share-icon">🔗</span><span class="btn-text" id="btn-share-text"> Ссылка</span>
   </button>
@@ -61,14 +108,6 @@
     <button class="btn" id="btn-zoom-out" title="Отдалить [-]">➖</button>
   </div>
 
-  <div class="separator-h"></div>
-  <button class="btn" id="btn-export-svg" title="Экспорт в SVG">
-    <span>🖼️</span><span class="btn-text"> В SVG</span>
-  </button>
-  <button class="btn" id="btn-export-drawio" title="Экспорт в Draw.io">
-    <span>📐</span><span class="btn-text"> В Draw.io</span>
-  </button>
-
   <div class="separator-h" style="margin-top:auto;"></div>
 
   <button class="btn btn-danger has-tooltip" id="btn-clear-all" title="Стереть всё" data-tooltip="Стереть всё: очищает всю карту, удаляя все хосты, связи и группы">
@@ -77,7 +116,7 @@
 </div>
 
 <header id="top-info-banner">
-  <span class="top-info-tag">SecMap</span>
+  <span class="top-info-tag">SecMap.RU</span>
   <p class="top-info-text">
     Инструмент, позволяющий быстро и просто отрисовать схему потоков данных и выгрузить ее в популярные форматы, либо просто поделиться с коллегами, друзьями. Вся работа происходит исключительно в браузере, а на сервер ничего не передается.
   </p>
@@ -99,7 +138,6 @@
   </div>
 </div>
 
-<!-- Сайдбар параметров -->
 <div id="sidebar">
   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
     <h3 id="sidebar-title" style="font-size: 13px;">Параметры</h3>
@@ -108,7 +146,6 @@
   <div id="sidebar-content"></div>
 </div>
 
-<!-- Модальное окно CSV -->
 <div id="modal-overlay">
   <div class="modal-box">
     <h3 style="font-size: 15px;">Импорт потоков (CSV)</h3>
@@ -124,24 +161,10 @@
 </div>
 
 <div id="help-overlay">
-  Выделение рамкой с зажатым <code>Shift</code> или клик с <code>Ctrl/Shift</code>.<br>Горячие клавиши: <code>Del/Backspace</code> — удалить, <code>Ctrl+A</code> — выбрать всё, <code>Esc</code> — сброс, <code>H</code> — хост, <code>G</code> — группа, <code>C</code> — связь.
+  Выделение рамкой с <code>Shift</code> или клик с <code>Ctrl/Shift</code>.<br>Горячие клавиши: <code>Del</code> — удалить, <code>Ctrl+A</code> — выбрать всё, <code>Esc</code> — сброс, <code>H</code> — хост, <code>G</code> — группа, <code>C</code> — связать.
 </div>
 
 <script src="assets/main.js"></script>
-
-<!-- Yandex.Metrika counter -->
-<script type="text/javascript">
-  (function(m,e,t,r,i,k,a){
-    m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
-    m[i].l=1*new Date();
-    for (var j = 0; j < document.scripts.length; j++) {if (document.scripts[j].src === r) { return; }}
-    k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)
-  })(window, document,'script','https://mc.yandex.ru/metrika/tag.js?id=113487236', 'ym');
-
-  ym(113487236, 'init', {ssr:true, clickmap:true, referrer: document.referrer, url: location.href, accurateTrackBounce:true, trackLinks:true});
-</script>
-<noscript><div><img src="https://mc.yandex.ru/watch/113487236" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
-<!-- /Yandex.Metrika counter -->
 
 </body>
 </html>

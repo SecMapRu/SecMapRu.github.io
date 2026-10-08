@@ -21,6 +21,8 @@
     --btn-hover: #e2e8f0;
     --selection-box-bg: rgba(2, 132, 199, 0.12);
     --selection-box-border: #0284c7;
+    --dropdown-bg: #ffffff;
+    --dropdown-hover: #f1f5f9;
 }
 
 body.theme-dark {
@@ -46,6 +48,8 @@ body.theme-dark {
     --btn-hover: #334155;
     --selection-box-bg: rgba(56, 189, 248, 0.16);
     --selection-box-border: #38bdf8;
+    --dropdown-bg: #1e293b;
+    --dropdown-hover: #334155;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
@@ -59,13 +63,14 @@ body {
     display: flex;
 }
 
-/* Вертикальный тулбар слева */
+/* Вертикальный тулбар слева: жестко заблокирован горизонтальный скролл */
 #toolbar {
     position: absolute;
     top: 12px;
     left: 12px;
     bottom: 12px;
     width: 130px;
+    box-sizing: border-box;
     z-index: 60;
     background: var(--panel-bg);
     border: 1px solid var(--border);
@@ -76,7 +81,7 @@ body {
     gap: 6px;
     box-shadow: 0 4px 15px rgba(0,0,0,0.08);
     overflow-y: auto;
-    overflow-x: hidden !important;
+    overflow-x: hidden !important; /* Убирает горизонтальный скролл тулбара */
     overscroll-behavior-x: none;
 }
 
@@ -98,18 +103,22 @@ body {
     box-sizing: border-box;
     white-space: nowrap;
     position: relative;
+    overflow: hidden; /* Гарантирует отсутствие распирания кнопки */
 }
 
 .btn .btn-text {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 .zoom-group {
     display: flex;
     gap: 2px;
     width: 100%;
+    max-width: 100%;
     box-sizing: border-box;
 }
 
@@ -148,7 +157,94 @@ body {
 }
 .has-tooltip:hover::after { opacity: 1; visibility: visible; }
 
-/* Органичная верхняя плашка описания (SEO + статус) */
+/* ==========================================
+   DROPDOWN МЕНЮ ЭКСПОРТА (ВСПЛЫВАЮЩЕЕ ПОВЕРХ ХОЛСТА)
+   ========================================== */
+.dropdown-wrapper {
+    position: relative;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.dropdown-menu {
+    position: fixed; /* Полная отвязка от контекста тулбара */
+    width: 250px;
+    background: var(--dropdown-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.22);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    z-index: 9999;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateX(-12px) scale(0.96);
+    transform-origin: left top;
+    transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+    visibility 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dropdown-menu.active {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateX(0) scale(1);
+}
+
+.dropdown-item {
+    background: transparent;
+    border: none;
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-align: left;
+    width: 100%;
+    transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.dropdown-item:hover {
+    background: var(--dropdown-hover);
+    transform: translateX(3px);
+}
+
+.dropdown-item .item-icon {
+    font-size: 18px;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.dropdown-item .item-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.dropdown-item .item-text strong {
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.dropdown-item .item-text small {
+    font-size: 10px;
+    color: var(--text-muted);
+}
+
+.dropdown-separator {
+    height: 1px;
+    background: var(--border);
+    margin: 3px 0;
+}
+
+/* Органичная верхняя плашка описания */
 #top-info-banner {
     position: absolute;
     top: 12px;
@@ -596,10 +692,9 @@ body.disable-flow .edge-flow-particles { display: none !important; }
 }
 
 /* ==========================================
-       АДАПТИВНОСТЬ ДЛЯ МОБИЛЬНЫХ УСТРОЙСТВ
-       ========================================== */
+   АДАПТИВНОСТЬ ДЛЯ МОБИЛЬНЫХ УСТРОЙСТВ
+   ========================================== */
 @media (max-width: 768px) {
-    /* Полностью скрываем подсказки, баннеры и SEO-плашку на мобильных экранах */
     #help-overlay, #top-info-banner, .quick-port {
         display: none !important;
     }
@@ -613,7 +708,7 @@ body.disable-flow .edge-flow-particles { display: none !important; }
         gap: 6px;
         align-items: center;
         overflow-y: auto;
-        overflow-x: hidden;
+        overflow-x: hidden !important;
         -webkit-overflow-scrolling: touch;
         z-index: 50;
     }
@@ -629,6 +724,26 @@ body.disable-flow .edge-flow-particles { display: none !important; }
 
     .btn-text {
         display: none !important;
+    }
+
+    /* Мобильный дропдаун */
+    .dropdown-menu {
+        width: 210px;
+        box-shadow: 0 8px 30px rgba(0,0,0,0.35);
+        transform: translateY(10px) scale(0.95);
+        transform-origin: left bottom;
+    }
+    .dropdown-menu.active {
+        transform: translateY(0) scale(1);
+    }
+    .dropdown-item {
+        padding: 6px 8px;
+    }
+    .dropdown-item .item-text strong {
+        font-size: 11px;
+    }
+    .dropdown-item .item-text small {
+        font-size: 9px;
     }
 
     .zoom-group {
