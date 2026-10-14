@@ -3089,16 +3089,36 @@ document.getElementById('btn-export-drawio').onclick = () => {
     });
 
     pairMap.forEach(edges => {
+        const baseFromId = edges[0].from;
+
         edges.forEach((e, idx) => {
+            const actualFn = state.nodes.find(n => n.id === e.from);
+            const actualTn = state.nodes.find(n => n.id === e.to);
+            if (!actualFn || !actualTn) return;
+
+            const effectiveIdx = (e.from === baseFromId) ? idx : (edges.length - 1 - idx);
+            const geom = getPolylinePoints(actualFn, actualTn, e.points, effectiveIdx, edges.length, e.labelT || 0.5);
+            if (!geom) return;
+
             const lbl = formatEdgeLabel(e);
-            const exitY = edges.length === 1 ? 0.5 : (idx + 1) / (edges.length + 1);
-            const entryY = exitY;
             const endArrowStyle = (e.type === 'line') ? 'endArrow=none;' : 'endArrow=block;endFill=1;';
-            const style = `edgeStyle=orthogonalEdgeStyle;curved=1;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=${edgeCol};fontColor=${textCol};labelBackgroundColor=${nodeCol};${endArrowStyle}exitX=1;exitY=${exitY};entryX=0;entryY=${entryY};`;
+            const isCurved = (geom.pts && geom.pts.length > 0) ? 'curved=1;' : 'curved=0;';
+            const style = `edgeStyle=none;${isCurved}rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=${edgeCol};fontColor=${textCol};labelBackgroundColor=${nodeCol};${endArrowStyle}`;
+
+            let pointsXml = '';
+            if (geom.pts && geom.pts.length > 0) {
+                pointsXml = `
+          <Array as="points">
+            ${geom.pts.map(p => `<mxPoint x="${Math.round(p.x)}" y="${Math.round(p.y)}" />`).join('\n            ')}
+          </Array>`;
+            }
 
             cells += `
       <mxCell id="${e.id}" value="${escapeHtml(lbl)}" style="${style}" edge="1" parent="1" source="${e.from}" target="${e.to}">
-        <mxGeometry relative="1" as="geometry" />
+        <mxGeometry relative="1" as="geometry">
+          <mxPoint x="${Math.round(geom.pStart.x)}" y="${Math.round(geom.pStart.y)}" as="sourcePoint" />
+          <mxPoint x="${Math.round(geom.pEnd.x)}" y="${Math.round(geom.pEnd.y)}" as="targetPoint" />${pointsXml}
+        </mxGeometry>
       </mxCell>`;
         });
     });
