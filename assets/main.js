@@ -290,9 +290,9 @@ function initDemo() {
         to: nC2.id,
         type: 'arrow',
         port: '443',
-        srcPort: '49201',
-        srcPhysicalPort: 'eth0',
-        dstPhysicalPort: 'wan0',
+        srcPort: '',
+        srcPhysicalPort: '',
+        dstPhysicalPort: '',
         flow: 'Reverse HTTPS Beacon (C2)',
         points: [],
         labelT: 0.5
@@ -333,8 +333,8 @@ function initDemo() {
         type: 'arrow',
         port: '5432',
         srcPort: '',
-        srcPhysicalPort: 'eth1',
-        dstPhysicalPort: 'eth0',
+        srcPhysicalPort: '',
+        dstPhysicalPort: '',
         flow: 'SQL Dump / PII Staging',
         points: [],
         labelT: 0.5
