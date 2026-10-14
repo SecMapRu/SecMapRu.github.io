@@ -4,10 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>SecMap - бесплатный online конструктор потоков данных и сетевых схем</title>
-  <meta name="description" content="Бесплатный онлайн-конструктор сетевых схем и потоков данных. Импорт правил firewall из CSV, экспорт в PNG, SVG, Draw.io, JSON. Визуализация топологии сети с анимацией трафика.">
+  <meta name="description" content="Бесплатный онлайн-конструктор сетевых схем и потоков данных. Импорт правил firewall из CSV, экспорт в PNG, SVG, JSON, Draw.io.">
   <meta name="keywords" content="визуализация сети онлайн, схема firewall, импорт csv draw.io, экспорт png svg, топология сети, конструктор сетевых схем, secmap">
   <meta property="og:title" content="SecMap — бесплатный конструктор сетевых схем">
-  <meta property="og:description" content="Импортируй правила фаервола из CSV → получай красивую схему с анимацией трафика. Экспорт в PNG/SVG/Draw.io/JSON. Работает прямо в браузере.">
+  <meta property="og:description" content="Импортируй правила фаервола из CSV → получай красивую схему с анимацией трафика. Экспорт в PNG/SVG/JSON/Draw.io. Работает прямо в браузере.">
   <meta property="og:type" content="website">
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
   <link rel="stylesheet" href="assets/style.css">
@@ -36,7 +36,7 @@
         <span class="item-icon">📊</span>
         <span class="item-text">
           <strong>Импорт из CSV</strong>
-          <small>src_ip;dst_ip;port;comment</small>
+          <small>С обязательным заголовком</small>
         </span>
       </button>
       <div class="dropdown-separator"></div>
@@ -82,7 +82,7 @@
         <span class="item-icon">💾</span>
         <span class="item-text">
           <strong>Файл проекта JSON</strong>
-          <small>Просто сделаем бэкап</small>
+          <small>Бэкап конфигурации</small>
         </span>
       </button>
     </div>
@@ -118,7 +118,7 @@
 <header id="top-info-banner">
   <span class="top-info-tag">SecMap.RU</span>
   <p class="top-info-text">
-    Инструмент, позволяющий быстро и просто отрисовать схему потоков данных и выгрузить ее в популярные форматы, либо просто поделиться с коллегами, друзьями. Вся работа происходит исключительно в браузере, а на сервер ничего не передается.
+    Инструмент для быстрого моделирования сетевых схем и потоков данных. Вся работа происходит исключительно в браузере.
   </p>
 </header>
 
@@ -135,6 +135,7 @@
       </defs>
     </svg>
     <div id="nodes-container"></div>
+    <div id="edge-handles-layer"></div>
   </div>
 </div>
 
@@ -148,11 +149,12 @@
 
 <div id="modal-overlay">
   <div class="modal-box">
-    <h3 style="font-size: 15px;">Импорт потоков (CSV)</h3>
+    <h3 style="font-size: 15px;">Импорт потоков из CSV</h3>
     <p style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
-      Формат: <code>src_ip;dst_ip;dst_port;comment</code>
+      Первая строка <strong>обязательно</strong> должна содержать заголовки.<br>
+      Доступные колонки: <code>src_ip;dst_ip;src_port;dst_port;src_physical_port;dst_physical_port;comment</code>
     </p>
-    <textarea id="import-text" placeholder="10.0.0.1;10.0.0.2;80;HTTP&#10;10.0.0.1;10.0.0.2;443;HTTPS&#10;10.0.0.2;10.0.1.5;5432;Postgres"></textarea>
+    <textarea id="import-text" placeholder="src_ip;dst_ip;src_port;dst_port;src_physical_port;dst_physical_port;comment&#10;10.0.0.1;10.0.0.2;;80;eth0;eth1;HTTP Access&#10;10.0.0.2;10.0.1.5;45000;5432;;;PostgreSQL DB"></textarea>
     <div style="display:flex; justify-content:flex-end; gap: 6px;">
       <button class="btn" id="btn-cancel-import" style="width:auto;">Отмена</button>
       <button class="btn active" id="btn-run-import" style="width:auto;">Импортировать</button>

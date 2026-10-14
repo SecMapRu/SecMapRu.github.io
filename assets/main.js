@@ -1,4 +1,4 @@
-const STORAGE_KEY = 'NET_MAP_STATE_V8';
+const STORAGE_KEY = 'NET_MAP_STATE_V11';
 
 const state = {
     nodes: [],
@@ -26,6 +26,43 @@ const viewport = document.getElementById('viewport');
 const edgesLayer = document.getElementById('edges-layer');
 const nodesContainer = document.getElementById('nodes-container');
 const groupsContainer = document.getElementById('groups-container');
+let edgeHandlesLayer = document.getElementById('edge-handles-layer');
+if (!edgeHandlesLayer) {
+    edgeHandlesLayer = document.createElement('div');
+    edgeHandlesLayer.id = 'edge-handles-layer';
+    viewport.appendChild(edgeHandlesLayer);
+}
+
+// Слой направляющих линий выравнивания
+let guidesLayer = document.getElementById('guides-layer');
+if (!guidesLayer) {
+    guidesLayer = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    guidesLayer.id = 'guides-layer';
+    guidesLayer.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:28;overflow:visible;';
+    viewport.appendChild(guidesLayer);
+}
+
+function clearSnapGuides() {
+    if (guidesLayer) guidesLayer.innerHTML = '';
+}
+
+function renderSnapGuides(guides) {
+    clearSnapGuides();
+    if (!guides || guides.length === 0) return;
+    guides.forEach(g => {
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', g.x1);
+        line.setAttribute('y1', g.y1);
+        line.setAttribute('x2', g.x2);
+        line.setAttribute('y2', g.y2);
+        line.setAttribute('stroke', '#f59e0b');
+        line.setAttribute('stroke-width', '1');
+        line.setAttribute('stroke-dasharray', '4,3');
+        line.setAttribute('opacity', '0.9');
+        guidesLayer.appendChild(line);
+    });
+}
+
 const sidebar = document.getElementById('sidebar');
 const sidebarContent = document.getElementById('sidebar-content');
 const sidebarTitle = document.getElementById('sidebar-title');
@@ -38,7 +75,7 @@ const btnImportMenu = document.getElementById('btn-import-menu');
 const domNodes = new Map();
 const domGroups = new Map();
 
-const uid = () => '_' + Math.random().toString(36).substr(2, 9);
+const uid = () => '_' + Math.random().toString(36).substring(2, 11);
 
 function escapeHtml(unsafe) {
     if (!unsafe) return '';
@@ -93,15 +130,33 @@ function scheduleSave() {
     }, 300);
 }
 
+function normalizePoints(edge) {
+    if (Array.isArray(edge.points)) {
+        return edge.points;
+    }
+    if (edge.controlPoint && typeof edge.controlPoint.x === 'number') {
+        return [{ id: uid(), x: edge.controlPoint.x, y: edge.controlPoint.y }];
+    }
+    return [];
+}
+
 function loadSavedState() {
     try {
-        const data = localStorage.getItem(STORAGE_KEY);
+        const data = localStorage.getItem(STORAGE_KEY) || localStorage.getItem('NET_MAP_STATE_V10') || localStorage.getItem('NET_MAP_STATE_V9') || localStorage.getItem('NET_MAP_STATE_V8');
         if (data) {
             const parsed = JSON.parse(data);
             if (Array.isArray(parsed.nodes) && Array.isArray(parsed.edges)) {
                 state.nodes = parsed.nodes;
                 state.groups = parsed.groups || [];
-                state.edges = parsed.edges;
+                state.edges = parsed.edges.map(e => ({
+                    ...e,
+                    type: e.type || 'arrow',
+                    srcPort: e.srcPort || '',
+                    srcPhysicalPort: e.srcPhysicalPort || '',
+                    dstPhysicalPort: e.dstPhysicalPort || '',
+                    points: normalizePoints(e),
+                    labelT: typeof e.labelT === 'number' ? e.labelT : 0.5
+                }));
                 state.pan = parsed.pan || { x: 0, y: 0 };
                 state.scale = parsed.scale || 1;
                 state.theme = parsed.theme || 'light';
@@ -233,48 +288,84 @@ function initDemo() {
         id: uid(),
         from: nVictim.id,
         to: nC2.id,
+        type: 'arrow',
         port: '443',
-        flow: 'Reverse HTTPS Beacon (C2)'
+        srcPort: '49201',
+        srcPhysicalPort: 'eth0',
+        dstPhysicalPort: 'wan0',
+        flow: 'Reverse HTTPS Beacon (C2)',
+        points: [],
+        labelT: 0.5
     });
 
     state.edges.push({
         id: uid(),
         from: nVictim.id,
         to: nDC.id,
+        type: 'arrow',
         port: '445',
-        flow: 'Pass-the-Ticket / DCSync'
+        srcPort: '',
+        srcPhysicalPort: '',
+        dstPhysicalPort: '',
+        flow: 'Pass-the-Ticket / DCSync',
+        points: [],
+        labelT: 0.5
     });
 
     state.edges.push({
         id: uid(),
         from: nDC.id,
         to: nDB.id,
+        type: 'line',
         port: '88',
-        flow: 'Kerberos Ticket TGS'
+        srcPort: '',
+        srcPhysicalPort: '',
+        dstPhysicalPort: '',
+        flow: 'Kerberos Ticket TGS',
+        points: [],
+        labelT: 0.5
     });
 
     state.edges.push({
         id: uid(),
         from: nDB.id,
         to: nVictim.id,
+        type: 'arrow',
         port: '5432',
-        flow: 'SQL Dump / PII Staging'
+        srcPort: '',
+        srcPhysicalPort: 'eth1',
+        dstPhysicalPort: 'eth0',
+        flow: 'SQL Dump / PII Staging',
+        points: [],
+        labelT: 0.5
     });
 
     state.edges.push({
         id: uid(),
         from: nVictim.id,
         to: nProxy.id,
+        type: 'arrow',
         port: '3128',
-        flow: 'Encrypted Tunnel (Connect)'
+        srcPort: '',
+        srcPhysicalPort: '',
+        dstPhysicalPort: '',
+        flow: 'Encrypted Tunnel (Connect)',
+        points: [],
+        labelT: 0.5
     });
 
     state.edges.push({
         id: uid(),
         from: nProxy.id,
         to: nDropZone.id,
+        type: 'arrow',
         port: '8443',
-        flow: 'Exfiltrated Archive (7z/TLS)'
+        srcPort: '',
+        srcPhysicalPort: '',
+        dstPhysicalPort: '',
+        flow: 'Exfiltrated Archive (7z/TLS)',
+        points: [],
+        labelT: 0.5
     });
 
     state.pan = { x: 182, y: 143 };
@@ -308,7 +399,7 @@ container.addEventListener('wheel', (e) => {
 
 container.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;
-    const isTargetCanvas = (e.target === container || e.target === viewport || e.target === edgesLayer);
+    const isTargetCanvas = (e.target === container || e.target === viewport || e.target === edgesLayer || e.target === edgeHandlesLayer);
 
     if (isTargetCanvas && (e.shiftKey || e.ctrlKey || e.metaKey)) {
         state.isMarqueeSelecting = true;
@@ -464,8 +555,14 @@ function quickSpawnConnectedNode(sourceNodeId, direction) {
         id: uid(),
         from: srcNode.id,
         to: newNode.id,
+        type: 'arrow',
         port: '80',
-        flow: 'Traffic'
+        srcPort: '',
+        srcPhysicalPort: '',
+        dstPhysicalPort: '',
+        flow: 'Traffic',
+        points: [],
+        labelT: 0.5
     });
 
     selectItem('node', newNode.id, false);
@@ -513,12 +610,12 @@ function syncNodesDOM() {
         el.className = `node-element ${n.type === 'Malicious' ? 'malicious' : ''} ${isSelected ? 'selected' : ''} ${state.isConnecting && state.connectSourceId === n.id ? 'connecting-source' : ''}`;
 
         el.innerHTML = `
-          <span>${icon}</span><span class="node-text">${escapeHtml(n.ip || n.name)}</span>
-          <div class="quick-port port-right" data-dir="right" title="Создать связь вправо">+</div>
-          <div class="quick-port port-left" data-dir="left" title="Создать связь влево">+</div>
-          <div class="quick-port port-top" data-dir="top" title="Создать связь вверх">+</div>
-          <div class="quick-port port-bottom" data-dir="bottom" title="Создать связь вниз">+</div>
-        `;
+      <span>${icon}</span><span class="node-text">${escapeHtml(n.ip || n.name)}</span>
+      <div class="quick-port port-right" data-dir="right" title="Создать связь вправо">+</div>
+      <div class="quick-port port-left" data-dir="left" title="Создать связь влево">+</div>
+      <div class="quick-port port-top" data-dir="top" title="Создать связь вверх">+</div>
+      <div class="quick-port port-bottom" data-dir="bottom" title="Создать связь вниз">+</div>
+    `;
 
         el.querySelectorAll('.quick-port').forEach(btn => {
             btn.addEventListener('mousedown', (e) => {
@@ -596,21 +693,21 @@ function syncGroupsDOM() {
         if (!g.collapsed) el.style.height = g.height + 'px';
 
         el.innerHTML = `
-          <div class="group-header">
-            <span>🔲 ${escapeHtml(g.name)} ${g.collapsed ? '*' : ''}</span>
-            <button class="collapse-btn">${g.collapsed ? 'Развернуть' : 'Свернуть'}</button>
-          </div>
-          ${!g.collapsed ? `
-            <div class="resizer r-e" data-dir="e"></div>
-            <div class="resizer r-w" data-dir="w"></div>
-            <div class="resizer r-s" data-dir="s"></div>
-            <div class="resizer r-n" data-dir="n"></div>
-            <div class="resizer corner r-se" data-dir="se"></div>
-            <div class="resizer corner r-sw" data-dir="sw"></div>
-            <div class="resizer corner r-ne" data-dir="ne"></div>
-            <div class="resizer corner r-nw" data-dir="nw"></div>
-          ` : ''}
-        `;
+      <div class="group-header">
+        <span>🔲 ${escapeHtml(g.name)} ${g.collapsed ? '*' : ''}</span>
+        <button class="collapse-btn">${g.collapsed ? 'Развернуть' : 'Свернуть'}</button>
+      </div>
+      ${!g.collapsed ? `
+        <div class="resizer r-e" data-dir="e"></div>
+        <div class="resizer r-w" data-dir="w"></div>
+        <div class="resizer r-s" data-dir="s"></div>
+        <div class="resizer r-n" data-dir="n"></div>
+        <div class="resizer corner r-se" data-dir="se"></div>
+        <div class="resizer corner r-sw" data-dir="sw"></div>
+        <div class="resizer corner r-ne" data-dir="ne"></div>
+        <div class="resizer corner r-nw" data-dir="nw"></div>
+      ` : ''}
+    `;
 
         el.querySelector('.collapse-btn').onclick = (e) => {
             e.stopPropagation();
@@ -689,47 +786,147 @@ function getBoxBorderIntersection(box, targetX, targetY) {
     };
 }
 
-function calculateEdgeGeometry(fn, tn, index, total) {
+function getPointAtT(fullCoords, t) {
+    if (fullCoords.length === 0) return { x: 0, y: 0 };
+    if (fullCoords.length === 1) return { x: fullCoords[0].x, y: fullCoords[0].y };
+
+    t = Math.max(0, Math.min(1, typeof t === 'number' ? t : 0.5));
+
+    const segLens = [];
+    let totalLen = 0;
+    for (let i = 0; i < fullCoords.length - 1; i++) {
+        const d = Math.hypot(fullCoords[i + 1].x - fullCoords[i].x, fullCoords[i + 1].y - fullCoords[i].y);
+        segLens.push(d);
+        totalLen += d;
+    }
+
+    if (totalLen === 0) return { x: fullCoords[0].x, y: fullCoords[0].y };
+
+    const targetDist = totalLen * t;
+    let accumulated = 0;
+
+    for (let i = 0; i < segLens.length; i++) {
+        const nextAcc = accumulated + segLens[i];
+        if (targetDist <= nextAcc || i === segLens.length - 1) {
+            const segFraction = segLens[i] === 0 ? 0 : (targetDist - accumulated) / segLens[i];
+            const p1 = fullCoords[i];
+            const p2 = fullCoords[i + 1];
+            return {
+                x: p1.x + (p2.x - p1.x) * segFraction,
+                y: p1.y + (p2.y - p1.y) * segFraction
+            };
+        }
+        accumulated = nextAcc;
+    }
+
+    return { x: fullCoords[fullCoords.length - 1].x, y: fullCoords[fullCoords.length - 1].y };
+}
+
+function projectPointToPolyline(px, py, fullCoords) {
+    if (fullCoords.length < 2) return 0.5;
+
+    const segLens = [];
+    let totalLen = 0;
+    for (let i = 0; i < fullCoords.length - 1; i++) {
+        const d = Math.hypot(fullCoords[i + 1].x - fullCoords[i].x, fullCoords[i + 1].y - fullCoords[i].y);
+        segLens.push(d);
+        totalLen += d;
+    }
+    if (totalLen === 0) return 0.5;
+
+    let bestDist = Infinity;
+    let bestDistAlong = 0;
+    let accLen = 0;
+
+    for (let i = 0; i < fullCoords.length - 1; i++) {
+        const p1 = fullCoords[i];
+        const p2 = fullCoords[i + 1];
+        const segLen = segLens[i];
+
+        if (segLen === 0) continue;
+
+        const l2 = (p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2;
+        let u = ((px - p1.x) * (p2.x - p1.x) + (py - p1.y) * (p2.y - p1.y)) / l2;
+        u = Math.max(0, Math.min(1, u));
+
+        const projX = p1.x + u * (p2.x - p1.x);
+        const projY = p1.y + u * (p2.y - p1.y);
+        const d = Math.hypot(px - projX, py - projY);
+
+        if (d < bestDist) {
+            bestDist = d;
+            bestDistAlong = accLen + u * segLen;
+        }
+
+        accLen += segLen;
+    }
+
+    return Math.max(0.04, Math.min(0.96, bestDistAlong / totalLen));
+}
+
+function getPolylinePoints(fn, tn, edgePoints, index, total, labelT = 0.5) {
     const b1 = getNodeBox(fn);
     const b2 = getNodeBox(tn);
     if (!b1 || !b2 || (b1.cx === b2.cx && b1.cy === b2.cy)) return null;
 
-    const dx = b2.cx - b1.cx;
-    const dy = b2.cy - b1.cy;
-    const dist = Math.hypot(dx, dy) || 1;
-    const nx = -dy / dist;
-    const ny = dx / dist;
+    let pts = (edgePoints && edgePoints.length > 0) ? edgePoints.map(p => ({ ...p })) : [];
 
-    let curvature = 0;
-    if (total > 1) {
-        curvature = (index - (total - 1) / 2) * 38;
+    if (pts.length === 0 && total > 1) {
+        const curvature = (index - (total - 1) / 2) * 38;
+        const dx = b2.cx - b1.cx;
+        const dy = b2.cy - b1.cy;
+        const dist = Math.hypot(dx, dy) || 1;
+        const nx = -dy / dist;
+        const ny = dx / dist;
+        const mx = (b1.cx + b2.cx) / 2;
+        const my = (b1.cy + b2.cy) / 2;
+        pts = [{ id: '_auto_curv', x: mx + nx * curvature, y: my + ny * curvature }];
     }
 
-    const mx = (b1.cx + b2.cx) / 2;
-    const my = (b1.cy + b2.cy) / 2;
-    const cx = mx + nx * curvature;
-    const cy = my + ny * curvature;
+    const firstTarget = pts.length > 0 ? pts[0] : { x: b2.cx, y: b2.cy };
+    const lastTarget = pts.length > 0 ? pts[pts.length - 1] : { x: b1.cx, y: b1.cy };
 
-    const targetForStart = (total === 1 || curvature === 0) ? b2.cx : cx;
-    const targetForStartY = (total === 1 || curvature === 0) ? b2.cy : cy;
+    const pStart = getBoxBorderIntersection(b1, firstTarget.x, firstTarget.y);
+    const pEnd = getBoxBorderIntersection(b2, lastTarget.x, lastTarget.y);
 
-    const p1 = getBoxBorderIntersection(b1, targetForStart, targetForStartY);
-    const p2 = getBoxBorderIntersection(b2, (total === 1 || curvature === 0) ? b1.cx : cx, (total === 1 || curvature === 0) ? b1.cy : cy);
+    const fullCoords = [pStart, ...pts, pEnd];
 
-    const pathData = (total === 1 || curvature === 0)
-        ? `M ${p1.x} ${p1.y} L ${p2.x} ${p2.y}`
-        : `M ${p1.x} ${p1.y} Q ${cx} ${cy} ${p2.x} ${p2.y}`;
+    let pathData = `M ${pStart.x} ${pStart.y}`;
+    if (pts.length === 0) {
+        pathData += ` L ${pEnd.x} ${pEnd.y}`;
+    } else {
+        for (let i = 0; i < pts.length; i++) {
+            pathData += ` L ${pts[i].x} ${pts[i].y}`;
+        }
+        pathData += ` L ${pEnd.x} ${pEnd.y}`;
+    }
 
-    const labelX = (total === 1 || curvature === 0) ? mx : 0.25 * p1.x + 0.5 * cx + 0.25 * p2.x;
-    const labelY = (total === 1 || curvature === 0) ? my : 0.25 * p1.y + 0.5 * cy + 0.25 * p2.y;
+    const labelPos = getPointAtT(fullCoords, labelT);
 
-    return { pathData, labelX, labelY };
+    return { pathData, pStart, pEnd, fullCoords, labelX: labelPos.x, labelY: labelPos.y, pts };
+}
+
+function formatEdgeLabel(edge) {
+    const parts = [];
+    if (edge.srcPhysicalPort) parts.push(`[${edge.srcPhysicalPort}]`);
+    if (edge.srcPort) parts.push(`:${edge.srcPort}`);
+
+    if (edge.srcPhysicalPort || edge.srcPort) {
+        parts.push(edge.type === 'line' ? '—' : '➔');
+    }
+
+    if (edge.port) parts.push(`[${edge.port}]`);
+    if (edge.dstPhysicalPort) parts.push(`[${edge.dstPhysicalPort}]`);
+    if (edge.flow) parts.push(edge.flow);
+
+    return parts.join(' ').trim();
 }
 
 function renderEdges() {
     const defs = edgesLayer.querySelector('defs');
     edgesLayer.innerHTML = '';
     edgesLayer.appendChild(defs);
+    edgeHandlesLayer.innerHTML = '';
 
     const pairMap = new Map();
     state.edges.forEach(e => {
@@ -748,7 +945,7 @@ function renderEdges() {
         const shouldAggregate = edges.length >= 5 && !state.expandedAggregates.has(pairKey);
 
         if (shouldAggregate) {
-            const geom = calculateEdgeGeometry(baseFn, baseTn, 0, 1);
+            const geom = getPolylinePoints(baseFn, baseTn, [], 0, 1, 0.5);
             if (!geom) return;
 
             const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -800,19 +997,31 @@ function renderEdges() {
                 if (!actualFn || !actualTn) return;
 
                 const effectiveIdx = (edge.from === baseFromId) ? idx : (edges.length - 1 - idx);
-                const geom = calculateEdgeGeometry(actualFn, actualTn, effectiveIdx, edges.length);
+                const labelT = typeof edge.labelT === 'number' ? edge.labelT : 0.5;
+                const geom = getPolylinePoints(actualFn, actualTn, edge.points, effectiveIdx, edges.length, labelT);
                 if (!geom) return;
 
                 const isSelected = state.selectedEdges.has(edge.id);
+                const isArrow = (edge.type !== 'line');
+
                 const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                 path.setAttribute('d', geom.pathData);
                 path.setAttribute('class', `edge-line ${isSelected ? 'selected' : ''}`);
-                path.setAttribute('marker-end', 'url(#arrow)');
+                if (isArrow) {
+                    path.setAttribute('marker-end', 'url(#arrow)');
+                }
+
                 path.addEventListener('click', (e) => {
                     e.stopPropagation();
                     const isMulti = e.shiftKey || e.ctrlKey || e.metaKey;
                     selectItem('edge', edge.id, isMulti);
                 });
+
+                path.addEventListener('dblclick', (e) => {
+                    e.stopPropagation();
+                    addBendPointToEdge(edge, e.clientX, e.clientY, geom.fullCoords);
+                });
+
                 edgesLayer.appendChild(path);
 
                 if (state.flowEnabled) {
@@ -822,7 +1031,11 @@ function renderEdges() {
                     edgesLayer.appendChild(flow);
                 }
 
-                let labelText = `${edge.port ? '[' + edge.port + '] ' : ''}${edge.flow || ''}`.trim();
+                if (isSelected) {
+                    renderMultiBendHandles(edge, geom);
+                }
+
+                let labelText = formatEdgeLabel(edge);
                 if (edges.length >= 5 && idx === 0) {
                     labelText += ' (▴ свернуть)';
                 }
@@ -853,7 +1066,9 @@ function renderEdges() {
                     rect.setAttribute('y', geom.labelY - 10);
                     rect.setAttribute('width', textWidth);
                     rect.setAttribute('height', 20);
-                    rect.setAttribute('class', 'edge-label-bg');
+                    rect.setAttribute('class', `edge-label-bg ${isSelected ? 'selected' : ''}`);
+
+                    enableLabelSlideAlongEdge(rect, edge, geom.fullCoords);
 
                     rect.addEventListener('click', (e) => {
                         e.stopPropagation();
@@ -868,6 +1083,194 @@ function renderEdges() {
                 }
             });
         }
+    });
+}
+
+function addBendPointToEdge(edge, clientX, clientY, fullCoords) {
+    const clickWorldX = (clientX - container.offsetLeft - state.pan.x) / state.scale;
+    const clickWorldY = (clientY - container.offsetTop - state.pan.y) / state.scale;
+
+    if (!Array.isArray(edge.points)) edge.points = [];
+
+    let bestSegmentIdx = 0;
+    let minDistance = Infinity;
+
+    for (let i = 0; i < fullCoords.length - 1; i++) {
+        const p1 = fullCoords[i];
+        const p2 = fullCoords[i + 1];
+        const dist = distToSegment(clickWorldX, clickWorldY, p1.x, p1.y, p2.x, p2.y);
+        if (dist < minDistance) {
+            minDistance = dist;
+            bestSegmentIdx = i;
+        }
+    }
+
+    const newPt = {
+        id: uid(),
+        x: Math.round(clickWorldX),
+        y: Math.round(clickWorldY)
+    };
+
+    edge.points.splice(bestSegmentIdx, 0, newPt);
+    selectItem('edge', edge.id, false);
+    renderEdges();
+    scheduleSave();
+}
+
+function distToSegment(px, py, x1, y1, x2, y2) {
+    const l2 = (x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1);
+    if (l2 === 0) return Math.hypot(px - x1, py - y1);
+    let t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2;
+    t = Math.max(0, Math.min(1, t));
+    return Math.hypot(px - (x1 + t * (x2 - x1)), py - (y1 + t * (y2 - y1)));
+}
+
+// Баг 1: если связь уже искривлена, точка искривления теперь позиционируется строго на ней
+function renderMultiBendHandles(edge, geom) {
+    if (!Array.isArray(edge.points) || edge.points.length === 0) {
+        const autoPt = (geom.pts && geom.pts.length > 0) ? geom.pts[0] : null;
+        const midX = autoPt ? autoPt.x : (geom.pStart.x + geom.pEnd.x) / 2;
+        const midY = autoPt ? autoPt.y : (geom.pStart.y + geom.pEnd.y) / 2;
+
+        const addHandle = document.createElement('div');
+        addHandle.className = 'edge-bend-handle edge-add-bend-handle';
+        addHandle.style.left = midX + 'px';
+        addHandle.style.top = midY + 'px';
+        addHandle.title = 'Потяните или кликните дважды по линии, чтобы добавить точку изгиба';
+
+        let isDragging = false;
+        let startX, startY;
+
+        addHandle.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return;
+            e.stopPropagation();
+            isDragging = true;
+            startX = e.clientX;
+            startY = e.clientY;
+
+            const newPoint = { id: uid(), x: Math.round(midX), y: Math.round(midY) };
+            edge.points = [newPoint];
+
+            const onMove = (ev) => {
+                if (!isDragging) return;
+                const dx = (ev.clientX - startX) / state.scale;
+                const dy = (ev.clientY - startY) / state.scale;
+                newPoint.x = Math.round(midX + dx);
+                newPoint.y = Math.round(midY + dy);
+                renderEdges();
+            };
+
+            const onUp = () => {
+                if (isDragging) {
+                    isDragging = false;
+                    scheduleSave();
+                }
+                window.removeEventListener('mousemove', onMove);
+                window.removeEventListener('mouseup', onUp);
+            };
+
+            window.addEventListener('mousemove', onMove);
+            window.addEventListener('mouseup', onUp);
+        });
+
+        edgeHandlesLayer.appendChild(addHandle);
+        return;
+    }
+
+    edge.points.forEach((pt, pIdx) => {
+        const handle = document.createElement('div');
+        handle.className = 'edge-bend-handle';
+        handle.style.left = pt.x + 'px';
+        handle.style.top = pt.y + 'px';
+        handle.title = `Точка изгиба #${pIdx + 1} (двойной клик — удалить)`;
+
+        let isDragging = false;
+        let startX, startY;
+        let initialX = pt.x;
+        let initialY = pt.y;
+
+        handle.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return;
+            e.stopPropagation();
+            isDragging = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            initialX = pt.x;
+            initialY = pt.y;
+
+            const onMove = (ev) => {
+                if (!isDragging) return;
+                const dx = (ev.clientX - startX) / state.scale;
+                const dy = (ev.clientY - startY) / state.scale;
+                pt.x = Math.round(initialX + dx);
+                pt.y = Math.round(initialY + dy);
+                renderEdges();
+            };
+
+            const onUp = () => {
+                if (isDragging) {
+                    isDragging = false;
+                    scheduleSave();
+                }
+                window.removeEventListener('mousemove', onMove);
+                window.removeEventListener('mouseup', onUp);
+            };
+
+            window.addEventListener('mousemove', onMove);
+            window.addEventListener('mouseup', onUp);
+        });
+
+        handle.addEventListener('dblclick', (e) => {
+            e.stopPropagation();
+            edge.points.splice(pIdx, 1);
+            renderEdges();
+            scheduleSave();
+        });
+
+        edgeHandlesLayer.appendChild(handle);
+    });
+}
+
+function enableLabelSlideAlongEdge(rectEl, edge, fullCoords) {
+    let isDragging = false;
+    let hasMoved = false;
+
+    rectEl.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        e.stopPropagation();
+        isDragging = true;
+        hasMoved = false;
+
+        const onMove = (ev) => {
+            if (!isDragging) return;
+            hasMoved = true;
+            const worldX = (ev.clientX - container.offsetLeft - state.pan.x) / state.scale;
+            const worldY = (ev.clientY - container.offsetTop - state.pan.y) / state.scale;
+
+            edge.labelT = projectPointToPolyline(worldX, worldY, fullCoords);
+            renderEdges();
+        };
+
+        const onUp = () => {
+            if (isDragging) {
+                isDragging = false;
+                if (hasMoved) {
+                    scheduleSave();
+                }
+            }
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+        };
+
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+    });
+
+    rectEl.addEventListener('dblclick', (e) => {
+        e.stopPropagation();
+        edge.labelT = 0.5;
+        renderEdges();
+        scheduleSave();
     });
 }
 
@@ -917,6 +1320,21 @@ function enableUniversalResize(handleEl, group, groupDiv) {
             newH = initH - appliedDy;
         }
 
+        if (group.parentGroupId) {
+            const parent = state.groups.find(p => p.id === group.parentGroupId);
+            if (parent) {
+                const minPX = parent.x + 8;
+                const maxPX = parent.x + parent.width - 8;
+                const minPY = parent.y + 36;
+                const maxPY = parent.y + parent.height - 8;
+
+                newX = Math.max(minPX, newX);
+                newY = Math.max(minPY, newY);
+                if (newX + newW > maxPX) newW = Math.max(160, maxPX - newX);
+                if (newY + newH > maxPY) newH = Math.max(100, maxPY - newY);
+            }
+        }
+
         group.x = Math.round(newX);
         group.y = Math.round(newY);
         group.width = Math.round(newW);
@@ -950,26 +1368,6 @@ function enableUniversalResize(handleEl, group, groupDiv) {
         window.addEventListener('mousemove', onMouseMove);
         window.addEventListener('mouseup', onMouseUp);
     });
-
-    handleEl.addEventListener('touchstart', (e) => {
-        if (e.touches.length !== 1) return;
-        e.stopPropagation();
-        startResize(e.touches[0].clientX, e.touches[0].clientY, handleEl.getAttribute('data-dir'));
-
-        const onTouchMove = (ev) => {
-            if (!isResizing || ev.touches.length !== 1) return;
-            ev.preventDefault();
-            doResize(ev.touches[0].clientX, ev.touches[0].clientY);
-        };
-        const onTouchEnd = () => {
-            stopResize();
-            window.removeEventListener('touchmove', onTouchMove);
-            window.removeEventListener('touchend', onTouchEnd);
-        };
-
-        window.addEventListener('touchmove', onTouchMove, { passive: false });
-        window.addEventListener('touchend', onTouchEnd);
-    }, { passive: false });
 }
 
 function clampWithinParentGroup(x, y, elemWidth, elemHeight, parentGroupId) {
@@ -986,6 +1384,20 @@ function clampWithinParentGroup(x, y, elemWidth, elemHeight, parentGroupId) {
         x: Math.min(Math.max(x, minX), Math.max(minX, maxX)),
         y: Math.min(Math.max(y, minY), Math.max(minY, maxY))
     };
+}
+
+function clampGroupWithinParent(g, parentGroupId) {
+    if (!parentGroupId) return;
+    const parent = state.groups.find(p => p.id === parentGroupId);
+    if (!parent) return;
+
+    const minX = parent.x + 8;
+    const maxX = parent.x + parent.width - g.width - 8;
+    const minY = parent.y + 36;
+    const maxY = parent.y + parent.height - (g.collapsed ? 36 : g.height) - 8;
+
+    g.x = Math.min(Math.max(g.x, minX), Math.max(minX, maxX));
+    g.y = Math.min(Math.max(g.y, minY), Math.max(minY, maxY));
 }
 
 function getTopLevelSelectedItems() {
@@ -1029,16 +1441,34 @@ function getTopLevelSelectedItems() {
     return { topGroups, topNodes };
 }
 
+function getMovingContext(topGroups, topNodes) {
+    const movingNodeIds = new Set(topNodes.map(n => n.id));
+    const collectChildNodes = (gid) => {
+        state.nodes.forEach(n => {
+            if (n.groupId === gid) movingNodeIds.add(n.id);
+        });
+        state.groups.forEach(g => {
+            if (g.parentGroupId === gid) collectChildNodes(g.id);
+        });
+    };
+    topGroups.forEach(g => collectChildNodes(g.id));
+
+    const movingEdges = state.edges.filter(e =>
+        (movingNodeIds.has(e.from) && movingNodeIds.has(e.to)) || state.selectedEdges.has(e.id)
+    );
+
+    return { movingNodeIds, movingEdges };
+}
+
 function enableNodeDrag(el, node) {
     let isDragging = false, sx, sy, moved = false;
     let initialPositions = new Map();
+    let movingEdges = [];
+    let movingNodeIds = new Set();
 
     const startDrag = (clientX, clientY, isMultiModifier = false) => {
         if (state.isConnecting) return;
-
-        if (isMultiModifier) {
-            return;
-        }
+        if (isMultiModifier) return;
 
         if (!state.selectedNodes.has(node.id)) {
             selectItem('node', node.id, false);
@@ -1053,14 +1483,79 @@ function enableNodeDrag(el, node) {
         const { topGroups, topNodes } = getTopLevelSelectedItems();
         topNodes.forEach(n => initialPositions.set('node:' + n.id, { x: n.x, y: n.y }));
         topGroups.forEach(g => initialPositions.set('group:' + g.id, { x: g.x, y: g.y }));
+
+        const ctx = getMovingContext(topGroups, topNodes);
+        movingNodeIds = ctx.movingNodeIds;
+        movingEdges = ctx.movingEdges;
+
+        movingEdges.forEach(e => {
+            if (Array.isArray(e.points)) {
+                e.points.forEach(pt => initialPositions.set('pt:' + pt.id, { x: pt.x, y: pt.y }));
+            }
+        });
     };
 
     const moveDrag = (clientX, clientY) => {
         if (!isDragging) return;
         if (Math.hypot(clientX - sx, clientY - sy) > 4) moved = true;
 
-        const dx = (clientX - sx) / state.scale;
-        const dy = (clientY - sy) / state.scale;
+        let dx = (clientX - sx) / state.scale;
+        let dy = (clientY - sy) / state.scale;
+
+        // Смарт-выравнивание (Snapping)
+        const initNode = initialPositions.get('node:' + node.id);
+        const guides = [];
+        if (initNode) {
+            let candX = initNode.x + dx;
+            let candY = initNode.y + dy;
+            const curBox = getNodeBox(node);
+            const snapDist = 7 / state.scale;
+
+            let bestDiffX = Infinity, snapX = null;
+            let bestDiffY = Infinity, snapY = null;
+            let guideXLine = null, guideYLine = null;
+
+            state.nodes.forEach(other => {
+                if (movingNodeIds.has(other.id) || isGroupEffectivelyCollapsed(other.groupId)) return;
+                const ob = getNodeBox(other);
+
+                const diffLeftX = Math.abs(candX - ob.x);
+                if (diffLeftX < snapDist && diffLeftX < bestDiffX) {
+                    bestDiffX = diffLeftX;
+                    snapX = ob.x;
+                    guideXLine = { x1: ob.x, y1: Math.min(candY, ob.y) - 60, x2: ob.x, y2: Math.max(candY + curBox.h, ob.y + ob.h) + 60 };
+                }
+                const diffCenterX = Math.abs((candX + curBox.w / 2) - ob.cx);
+                if (diffCenterX < snapDist && diffCenterX < bestDiffX) {
+                    bestDiffX = diffCenterX;
+                    snapX = ob.cx - curBox.w / 2;
+                    guideXLine = { x1: ob.cx, y1: Math.min(candY, ob.y) - 60, x2: ob.cx, y2: Math.max(candY + curBox.h, ob.y + ob.h) + 60 };
+                }
+
+                const diffTopY = Math.abs(candY - ob.y);
+                if (diffTopY < snapDist && diffTopY < bestDiffY) {
+                    bestDiffY = diffTopY;
+                    snapY = ob.y;
+                    guideYLine = { x1: Math.min(candX, ob.x) - 60, y1: ob.y, x2: Math.max(candX + curBox.w, ob.x + ob.w) + 60, y2: ob.y };
+                }
+                const diffCenterY = Math.abs((candY + curBox.h / 2) - ob.cy);
+                if (diffCenterY < snapDist && diffCenterY < bestDiffY) {
+                    bestDiffY = diffCenterY;
+                    snapY = ob.cy - curBox.h / 2;
+                    guideYLine = { x1: Math.min(candX, ob.x) - 60, y1: ob.cy, x2: Math.max(candX + curBox.w, ob.x + ob.w) + 60, y2: ob.cy };
+                }
+            });
+
+            if (snapX !== null) {
+                dx = snapX - initNode.x;
+                if (guideXLine) guides.push(guideXLine);
+            }
+            if (snapY !== null) {
+                dy = snapY - initNode.y;
+                if (guideYLine) guides.push(guideYLine);
+            }
+        }
+        renderSnapGuides(guides);
 
         const { topGroups, topNodes } = getTopLevelSelectedItems();
 
@@ -1089,8 +1584,15 @@ function enableNodeDrag(el, node) {
         topGroups.forEach(g => {
             const init = initialPositions.get('group:' + g.id);
             if (!init) return;
-            const targetX = Math.round(init.x + dx);
-            const targetY = Math.round(init.y + dy);
+            let targetX = Math.round(init.x + dx);
+            let targetY = Math.round(init.y + dy);
+
+            if (g.parentGroupId) {
+                const clamped = clampWithinParentGroup(targetX, targetY, g.width, g.collapsed ? 36 : g.height, g.parentGroupId);
+                targetX = clamped.x;
+                targetY = clamped.y;
+            }
+
             const curDx = targetX - g.x;
             const curDy = targetY - g.y;
 
@@ -1104,12 +1606,26 @@ function enableNodeDrag(el, node) {
             moveGroupRecursively(g.id, curDx, curDy);
         });
 
+        // Перемещение точек изгиба связей вместе с перемещаемыми элементами
+        movingEdges.forEach(e => {
+            if (Array.isArray(e.points)) {
+                e.points.forEach(pt => {
+                    const initPt = initialPositions.get('pt:' + pt.id);
+                    if (initPt) {
+                        pt.x = Math.round(initPt.x + dx);
+                        pt.y = Math.round(initPt.y + dy);
+                    }
+                });
+            }
+        });
+
         renderEdges();
     };
 
     const endDrag = () => {
         if (isDragging) {
             isDragging = false;
+            clearSnapGuides();
             scheduleSave();
         }
     };
@@ -1129,26 +1645,6 @@ function enableNodeDrag(el, node) {
         window.addEventListener('mousemove', onMouseMove);
         window.addEventListener('mouseup', onMouseUp);
     });
-
-    el.addEventListener('touchstart', (e) => {
-        if (e.touches.length !== 1) return;
-        e.stopPropagation();
-        startDrag(e.touches[0].clientX, e.touches[0].clientY, false);
-
-        const onTouchMove = (ev) => {
-            if (!isDragging || ev.touches.length !== 1) return;
-            ev.preventDefault();
-            moveDrag(ev.touches[0].clientX, ev.touches[0].clientY);
-        };
-        const onTouchEnd = () => {
-            endDrag();
-            window.removeEventListener('touchmove', onTouchMove);
-            window.removeEventListener('touchend', onTouchEnd);
-        };
-
-        window.addEventListener('touchmove', onTouchMove, { passive: false });
-        window.addEventListener('touchend', onTouchEnd);
-    }, { passive: false });
 
     el.addEventListener('click', (e) => {
         if (moved) {
@@ -1188,13 +1684,11 @@ function moveGroupRecursively(groupId, dx, dy) {
 function enableGroupDrag(el, group) {
     let isDragging = false, sx, sy, moved = false;
     let initialPositions = new Map();
+    let movingEdges = [];
 
     const startDrag = (clientX, clientY, isMultiModifier = false) => {
         if (state.isConnecting) return;
-
-        if (isMultiModifier) {
-            return;
-        }
+        if (isMultiModifier) return;
 
         if (!state.selectedGroups.has(group.id)) {
             selectItem('group', group.id, false);
@@ -1209,6 +1703,14 @@ function enableGroupDrag(el, group) {
         const { topGroups, topNodes } = getTopLevelSelectedItems();
         topNodes.forEach(n => initialPositions.set('node:' + n.id, { x: n.x, y: n.y }));
         topGroups.forEach(g => initialPositions.set('group:' + g.id, { x: g.x, y: g.y }));
+
+        const ctx = getMovingContext(topGroups, topNodes);
+        movingEdges = ctx.movingEdges;
+        movingEdges.forEach(e => {
+            if (Array.isArray(e.points)) {
+                e.points.forEach(pt => initialPositions.set('pt:' + pt.id, { x: pt.x, y: pt.y }));
+            }
+        });
     };
 
     const moveDrag = (clientX, clientY) => {
@@ -1236,8 +1738,15 @@ function enableGroupDrag(el, group) {
         topGroups.forEach(g => {
             const init = initialPositions.get('group:' + g.id);
             if (!init) return;
-            const targetX = Math.round(init.x + dx);
-            const targetY = Math.round(init.y + dy);
+            let targetX = Math.round(init.x + dx);
+            let targetY = Math.round(init.y + dy);
+
+            if (g.parentGroupId) {
+                const clamped = clampWithinParentGroup(targetX, targetY, g.width, g.collapsed ? 36 : g.height, g.parentGroupId);
+                targetX = clamped.x;
+                targetY = clamped.y;
+            }
+
             const curDx = targetX - g.x;
             const curDy = targetY - g.y;
 
@@ -1249,6 +1758,18 @@ function enableGroupDrag(el, group) {
                 gEl.style.top = g.y + 'px';
             }
             moveGroupRecursively(g.id, curDx, curDy);
+        });
+
+        movingEdges.forEach(e => {
+            if (Array.isArray(e.points)) {
+                e.points.forEach(pt => {
+                    const initPt = initialPositions.get('pt:' + pt.id);
+                    if (initPt) {
+                        pt.x = Math.round(initPt.x + dx);
+                        pt.y = Math.round(initPt.y + dy);
+                    }
+                });
+            }
         });
 
         renderEdges();
@@ -1276,28 +1797,6 @@ function enableGroupDrag(el, group) {
         window.addEventListener('mousemove', onMouseMove);
         window.addEventListener('mouseup', onMouseUp);
     });
-
-    el.addEventListener('touchstart', (e) => {
-        if (e.touches.length !== 1 || e.target.classList.contains('collapse-btn') || e.target.classList.contains('resizer')) return;
-        e.stopPropagation();
-        startDrag(e.touches[0].clientX, e.touches[0].clientY, false);
-
-        const onTouchMove = (ev) => {
-            if (!isDragging || ev.touches.length !== 1) return;
-            ev.preventDefault();
-            moveDrag(ev.touches[0].clientX, ev.touches[0].clientY);
-        };
-        const onTouchEnd = () => {
-            if (isDragging) {
-                endDrag();
-            }
-            window.removeEventListener('touchmove', onTouchMove);
-            window.removeEventListener('touchend', onTouchEnd);
-        };
-
-        window.addEventListener('touchmove', onTouchMove, { passive: false });
-        window.addEventListener('touchend', onTouchEnd);
-    }, { passive: false });
 
     el.addEventListener('click', (e) => {
         if (moved) {
@@ -1461,19 +1960,19 @@ function renderSingleNodeSidebar(id) {
     });
 
     sidebarContent.innerHTML = `
-      <div class="form-group"><label>Имя</label><input type="text" id="prop-name" value="${escapeHtml(node.name)}"></div>
-      <div class="form-group"><label>IP Адрес</label><input type="text" id="prop-ip" value="${escapeHtml(node.ip || '')}"></div>
-      <div class="form-group"><label>Привязка к группе</label><select id="prop-group">${groupOptions}</select></div>
-      <div class="form-group"><label>Тип</label><select id="prop-type">
-        <option value="Host" ${node.type==='Host'?'selected':''}>Обычный хост (Host)</option>
-        <option value="Server" ${node.type==='Server'?'selected':''}>Сервер (Server)</option>
-        <option value="Malicious" ${node.type==='Malicious'?'selected':''}>Вредоносный хост (Malicious)</option>
-        <option value="Gateway" ${node.type==='Gateway'?'selected':''}>Шлюз / Маршрутизатор (Gateway)</option>
-        <option value="Database" ${node.type==='Database'?'selected':''}>База Данных (DB)</option>
-        <option value="Firewall" ${node.type==='Firewall'?'selected':''}>Файрвол (FW)</option>
-      </select></div>
-      <button class="btn btn-danger sidebar-delete-btn" id="sidebar-delete-action">🗑️ Удалить этот хост [Del]</button>
-    `;
+    <div class="form-group"><label>Имя</label><input type="text" id="prop-name" value="${escapeHtml(node.name)}"></div>
+    <div class="form-group"><label>IP Адрес</label><input type="text" id="prop-ip" value="${escapeHtml(node.ip || '')}"></div>
+    <div class="form-group"><label>Привязка к группе</label><select id="prop-group">${groupOptions}</select></div>
+    <div class="form-group"><label>Тип</label><select id="prop-type">
+      <option value="Host" ${node.type==='Host'?'selected':''}>Обычный хост (Host)</option>
+      <option value="Server" ${node.type==='Server'?'selected':''}>Сервер (Server)</option>
+      <option value="Malicious" ${node.type==='Malicious'?'selected':''}>Вредоносный хост (Malicious)</option>
+      <option value="Gateway" ${node.type==='Gateway'?'selected':''}>Шлюз / Маршрутизатор (Gateway)</option>
+      <option value="Database" ${node.type==='Database'?'selected':''}>База Данных (DB)</option>
+      <option value="Firewall" ${node.type==='Firewall'?'selected':''}>Файрвол (FW)</option>
+    </select></div>
+    <button class="btn btn-danger sidebar-delete-btn" id="sidebar-delete-action">🗑️ Удалить этот хост [Del]</button>
+  `;
     document.getElementById('prop-name').oninput = (e) => { node.name = e.target.value; syncNodesDOM(); scheduleSave(); };
     document.getElementById('prop-ip').oninput = (e) => { node.ip = e.target.value; syncNodesDOM(); scheduleSave(); };
     document.getElementById('prop-group').onchange = (e) => {
@@ -1494,13 +1993,112 @@ function renderSingleEdgeSidebar(id) {
     const edge = state.edges.find(e => e.id === id);
     if (!edge) return;
     sidebarTitle.innerText = 'Связь (Поток)';
+    if (!Array.isArray(edge.points)) edge.points = [];
+
     sidebarContent.innerHTML = `
-      <div class="form-group"><label>Порт назначения (dst_port)</label><input type="text" id="prop-port" value="${escapeHtml(edge.port || '')}"></div>
-      <div class="form-group"><label>Назначение (comment)</label><input type="text" id="prop-flow" value="${escapeHtml(edge.flow || '')}"></div>
-      <button class="btn btn-danger sidebar-delete-btn" id="sidebar-delete-action">🗑️ Удалить эту связь [Del]</button>
-    `;
+    <div class="form-group"><label>Тип соединения</label><select id="prop-edge-type">
+      <option value="arrow" ${edge.type !== 'line' ? 'selected' : ''}>Стрелка (направленная)</option>
+      <option value="line" ${edge.type === 'line' ? 'selected' : ''}>Связь / Линия (ненаправленная)</option>
+    </select></div>
+    <div style="display:flex; gap:6px; margin-bottom:8px;">
+      <button class="btn" id="btn-reverse-direction" style="flex:1;">🔄 Сменить направление</button>
+    </div>
+    <div style="display:flex; gap:6px;">
+      <div class="form-group" style="flex:1;"><label>src_port</label><input type="text" id="prop-src-port" value="${escapeHtml(edge.srcPort || '')}"></div>
+      <div class="form-group" style="flex:1;"><label>dst_port</label><input type="text" id="prop-port" value="${escapeHtml(edge.port || '')}"></div>
+    </div>
+    <div style="display:flex; gap:6px;">
+      <div class="form-group" style="flex:1;"><label>src phys_port</label><input type="text" id="prop-src-phys" value="${escapeHtml(edge.srcPhysicalPort || '')}"></div>
+      <div class="form-group" style="flex:1;"><label>dst phys_port</label><input type="text" id="prop-dst-phys" value="${escapeHtml(edge.dstPhysicalPort || '')}"></div>
+    </div>
+    <div class="form-group"><label>Назначение (comment / flow)</label><input type="text" id="prop-flow" value="${escapeHtml(edge.flow || '')}"></div>
+    
+    <div style="margin: 8px 0; padding: 6px; background: rgba(0,0,0,0.03); border-radius: 6px;">
+      <div style="font-size: 11px; font-weight: 600; margin-bottom: 4px;">Точки изгиба: ${edge.points.length}</div>
+      <div style="font-size: 10px; color: var(--text-muted); margin-bottom: 6px;">Двойной клик на линии добавляет точку, на маркере — удаляет её.</div>
+      <div style="display:flex; gap:6px;">
+        <button class="btn" id="btn-add-bend-center" style="flex:1;">➕ Добавить изгиб</button>
+        <button class="btn" id="btn-reset-bend" style="flex:1;">Выпрямить всё</button>
+      </div>
+    </div>
+
+    <div style="display:flex; gap:6px; margin-top:8px;">
+      <button class="btn" id="btn-reset-label" style="flex:1;">Сбросить положение текста</button>
+    </div>
+    <button class="btn btn-danger sidebar-delete-btn" id="sidebar-delete-action">🗑️ Удалить эту связь [Del]</button>
+  `;
+
+    document.getElementById('prop-edge-type').onchange = (e) => {
+        edge.type = e.target.value;
+        renderEdges();
+        scheduleSave();
+    };
+
+    document.getElementById('btn-reverse-direction').onclick = () => {
+        const tmpFrom = edge.from;
+        edge.from = edge.to;
+        edge.to = tmpFrom;
+
+        const tmpPort = edge.srcPort;
+        edge.srcPort = edge.port;
+        edge.port = tmpPort;
+
+        const tmpPhys = edge.srcPhysicalPort;
+        edge.srcPhysicalPort = edge.dstPhysicalPort;
+        edge.dstPhysicalPort = tmpPhys;
+
+        if (Array.isArray(edge.points)) {
+            edge.points.reverse();
+        }
+        edge.labelT = 1 - (typeof edge.labelT === 'number' ? edge.labelT : 0.5);
+
+        renderEdges();
+        scheduleSave();
+        renderSingleEdgeSidebar(id);
+    };
+
+    document.getElementById('prop-src-port').oninput = (e) => { edge.srcPort = e.target.value; renderEdges(); scheduleSave(); };
     document.getElementById('prop-port').oninput = (e) => { edge.port = e.target.value; renderEdges(); scheduleSave(); };
+    document.getElementById('prop-src-phys').oninput = (e) => { edge.srcPhysicalPort = e.target.value; renderEdges(); scheduleSave(); };
+    document.getElementById('prop-dst-phys').oninput = (e) => { edge.dstPhysicalPort = e.target.value; renderEdges(); scheduleSave(); };
     document.getElementById('prop-flow').oninput = (e) => { edge.flow = e.target.value; renderEdges(); scheduleSave(); };
+
+    document.getElementById('btn-add-bend-center').onclick = () => {
+        const fn = state.nodes.find(n => n.id === edge.from);
+        const tn = state.nodes.find(n => n.id === edge.to);
+        if (fn && tn) {
+            const geom = getPolylinePoints(fn, tn, edge.points, 0, 1, 0.5);
+            const autoPt = (geom && geom.pts && geom.pts.length > 0) ? geom.pts[0] : null;
+            let nx, ny;
+            if (autoPt) {
+                nx = autoPt.x;
+                ny = autoPt.y;
+            } else {
+                const b1 = getNodeBox(fn);
+                const b2 = getNodeBox(tn);
+                nx = (b1.cx + b2.cx) / 2;
+                ny = (b1.cy + b2.cy) / 2;
+            }
+            edge.points.push({ id: uid(), x: Math.round(nx), y: Math.round(ny) });
+            renderEdges();
+            scheduleSave();
+            renderSingleEdgeSidebar(id);
+        }
+    };
+
+    document.getElementById('btn-reset-bend').onclick = () => {
+        edge.points = [];
+        renderEdges();
+        scheduleSave();
+        renderSingleEdgeSidebar(id);
+    };
+
+    document.getElementById('btn-reset-label').onclick = () => {
+        edge.labelT = 0.5;
+        renderEdges();
+        scheduleSave();
+    };
+
     document.getElementById('sidebar-delete-action').onclick = confirmAndDeleteCurrent;
 }
 
@@ -1517,24 +2115,19 @@ function renderSingleGroupSidebar(id) {
     });
 
     sidebarContent.innerHTML = `
-      <div class="form-group"><label>Название</label><input type="text" id="prop-gname" value="${escapeHtml(group.name)}"></div>
-      <div class="form-group"><label>Цвет группы</label><input type="color" id="prop-gcolor" value="${group.color || '#0284c7'}"></div>
-      <div class="form-group"><label>Родительская группа</label><select id="prop-gparent">${parentOptions}</select></div>
-      <div class="form-group"><label>Ширина (px)</label><input type="number" id="prop-gw" value="${group.width}"></div>
-      <div class="form-group"><label>Высота (px)</label><input type="number" id="prop-gh" value="${group.height}"></div>
-      <button class="btn btn-danger sidebar-delete-btn" id="sidebar-delete-action">🗑️ Удалить эту группу [Del]</button>
-    `;
+    <div class="form-group"><label>Название</label><input type="text" id="prop-gname" value="${escapeHtml(group.name)}"></div>
+    <div class="form-group"><label>Цвет группы</label><input type="color" id="prop-gcolor" value="${group.color || '#0284c7'}"></div>
+    <div class="form-group"><label>Родительская группа</label><select id="prop-gparent">${parentOptions}</select></div>
+    <div class="form-group"><label>Ширина (px)</label><input type="number" id="prop-gw" value="${group.width}"></div>
+    <div class="form-group"><label>Высота (px)</label><input type="number" id="prop-gh" value="${group.height}"></div>
+    <button class="btn btn-danger sidebar-delete-btn" id="sidebar-delete-action">🗑️ Удалить эту группу [Del]</button>
+  `;
     document.getElementById('prop-gname').oninput = (e) => { group.name = e.target.value; render(); scheduleSave(); };
     document.getElementById('prop-gcolor').oninput = (e) => { group.color = e.target.value; render(); scheduleSave(); };
     document.getElementById('prop-gparent').onchange = (e) => {
         group.parentGroupId = e.target.value || null;
         if (group.parentGroupId) {
-            const clamped = clampWithinParentGroup(group.x, group.y, group.width, group.height, group.parentGroupId);
-            const dx = clamped.x - group.x;
-            const dy = clamped.y - group.y;
-            group.x = clamped.x;
-            group.y = clamped.y;
-            moveGroupRecursively(group.id, dx, dy);
+            clampGroupWithinParent(group, group.parentGroupId);
         }
         render();
         scheduleSave();
@@ -1542,6 +2135,36 @@ function renderSingleGroupSidebar(id) {
     document.getElementById('prop-gw').oninput = (e) => { group.width = parseInt(e.target.value) || 160; render(); scheduleSave(); };
     document.getElementById('prop-gh').oninput = (e) => { group.height = parseInt(e.target.value) || 100; render(); scheduleSave(); };
     document.getElementById('sidebar-delete-action').onclick = confirmAndDeleteCurrent;
+}
+
+function alignSelectedNodes(direction) {
+    const nodes = Array.from(state.selectedNodes).map(id => state.nodes.find(n => n.id === id)).filter(Boolean);
+    if (nodes.length < 2) return;
+
+    if (direction === 'horizontal') {
+        const avgY = Math.round(nodes.reduce((acc, n) => acc + n.y, 0) / nodes.length);
+        nodes.forEach(n => {
+            n.y = avgY;
+            if (n.groupId) {
+                const clamped = clampWithinParentGroup(n.x, n.y, 95, 28, n.groupId);
+                n.x = clamped.x;
+                n.y = clamped.y;
+            }
+        });
+    } else if (direction === 'vertical') {
+        const avgX = Math.round(nodes.reduce((acc, n) => acc + n.x, 0) / nodes.length);
+        nodes.forEach(n => {
+            n.x = avgX;
+            if (n.groupId) {
+                const clamped = clampWithinParentGroup(n.x, n.y, 95, 28, n.groupId);
+                n.x = clamped.x;
+                n.y = clamped.y;
+            }
+        });
+    }
+
+    render();
+    scheduleSave();
 }
 
 function renderMultiSelectSidebar(counts) {
@@ -1557,24 +2180,45 @@ function renderMultiSelectSidebar(counts) {
         groupOptions += `<option value="${g.id}">${escapeHtml(g.name)}</option>`;
     });
 
-    let batchActionsHtml = `
-      <div style="margin-bottom: 12px;">${statBadges}</div>
+    let alignButtonsHtml = '';
+    if (counts.nodes >= 2) {
+        alignButtonsHtml = `
+      <div style="margin: 8px 0;">
+        <label style="font-size:11px; font-weight:600; color:var(--text-muted); display:block; margin-bottom:4px;">Выравнивание хостов:</label>
+        <div style="display:flex; gap:6px;">
+          <button class="btn" id="btn-align-h" style="flex:1;">⚖️ По горизонтали [Alt+H]</button>
+          <button class="btn" id="btn-align-v" style="flex:1;">⚖️ По вертикали [Alt+V]</button>
+        </div>
+      </div>
     `;
+    }
+
+    let batchActionsHtml = `
+    <div style="margin-bottom: 12px;">${statBadges}</div>
+    ${alignButtonsHtml}
+  `;
 
     if (counts.nodes > 0) {
         batchActionsHtml += `
-          <div class="form-group">
-            <label>Переместить выбранные хосты в группу:</label>
-            <select id="batch-node-group">${groupOptions}</select>
-          </div>
-        `;
+      <div class="form-group">
+        <label>Переместить выбранные хосты в группу:</label>
+        <select id="batch-node-group">${groupOptions}</select>
+      </div>
+    `;
     }
 
     batchActionsHtml += `
-      <button class="btn btn-danger sidebar-delete-btn" id="sidebar-delete-action">🗑️ Удалить все выбранные (${counts.total}) [Del]</button>
-    `;
+    <button class="btn btn-danger sidebar-delete-btn" id="sidebar-delete-action">🗑️ Удалить все выбранные (${counts.total}) [Del]</button>
+  `;
 
     sidebarContent.innerHTML = batchActionsHtml;
+
+    if (document.getElementById('btn-align-h')) {
+        document.getElementById('btn-align-h').onclick = () => alignSelectedNodes('horizontal');
+    }
+    if (document.getElementById('btn-align-v')) {
+        document.getElementById('btn-align-v').onclick = () => alignSelectedNodes('vertical');
+    }
 
     const batchGroupSelect = document.getElementById('batch-node-group');
     if (batchGroupSelect) {
@@ -1617,8 +2261,14 @@ function handleConnectClick(nodeId) {
                 id: uid(),
                 from: state.connectSourceId,
                 to: nodeId,
+                type: 'arrow',
                 port: '80',
-                flow: 'Traffic'
+                srcPort: '',
+                srcPhysicalPort: '',
+                dstPhysicalPort: '',
+                flow: 'Traffic',
+                points: [],
+                labelT: 0.5
             });
             scheduleSave();
         }
@@ -1721,7 +2371,6 @@ function zoomOut() {
     scheduleSave();
 }
 
-// Плавный возврат масштаба к 100% с центрированием видимой области
 function zoomReset() {
     const prevScale = state.scale;
     const targetScale = 1;
@@ -1750,6 +2399,53 @@ function selectAllItems() {
     state.edges.forEach(e => state.selectedEdges.add(e.id));
     updateSelectionState();
     render();
+}
+
+// Доработка 3: точное перемещение стрелками клавиатуры
+function moveSelectedElements(dx, dy) {
+    const { topGroups, topNodes } = getTopLevelSelectedItems();
+    const { movingEdges } = getMovingContext(topGroups, topNodes);
+
+    topNodes.forEach(n => {
+        n.x += dx;
+        n.y += dy;
+        if (n.groupId && topNodes.length === 1 && topGroups.length === 0) {
+            const clamped = clampWithinParentGroup(n.x, n.y, 95, 28, n.groupId);
+            n.x = clamped.x;
+            n.y = clamped.y;
+        }
+        const nEl = domNodes.get(n.id);
+        if (nEl) {
+            nEl.style.left = n.x + 'px';
+            nEl.style.top = n.y + 'px';
+        }
+    });
+
+    topGroups.forEach(g => {
+        g.x += dx;
+        g.y += dy;
+        if (g.parentGroupId) {
+            clampGroupWithinParent(g, g.parentGroupId);
+        }
+        const gEl = domGroups.get(g.id);
+        if (gEl) {
+            gEl.style.left = g.x + 'px';
+            gEl.style.top = g.y + 'px';
+        }
+        moveGroupRecursively(g.id, dx, dy);
+    });
+
+    movingEdges.forEach(e => {
+        if (Array.isArray(e.points)) {
+            e.points.forEach(pt => {
+                pt.x += dx;
+                pt.y += dy;
+            });
+        }
+    });
+
+    renderEdges();
+    scheduleSave();
 }
 
 window.addEventListener('keydown', (e) => {
@@ -1781,6 +2477,33 @@ window.addEventListener('keydown', (e) => {
     }
 
     if (isTyping) return;
+
+    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+        const counts = getSelectionCounts();
+        if (counts.total > 0) {
+            e.preventDefault();
+            const step = e.shiftKey ? 10 : 1;
+            let dx = 0, dy = 0;
+            if (e.key === 'ArrowLeft') dx = -step;
+            else if (e.key === 'ArrowRight') dx = step;
+            else if (e.key === 'ArrowUp') dy = -step;
+            else if (e.key === 'ArrowDown') dy = step;
+
+            moveSelectedElements(dx, dy);
+            return;
+        }
+    }
+
+    if (e.altKey && (e.key === 'h' || e.key === 'H' || e.code === 'KeyH')) {
+        e.preventDefault();
+        alignSelectedNodes('horizontal');
+        return;
+    }
+    if (e.altKey && (e.key === 'v' || e.key === 'V' || e.code === 'KeyV')) {
+        e.preventDefault();
+        alignSelectedNodes('vertical');
+        return;
+    }
 
     if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A' || e.code === 'KeyA')) {
         e.preventDefault();
@@ -1820,9 +2543,6 @@ window.addEventListener('keydown', (e) => {
     }
 });
 
-// ==========================================
-// ЛОГИКА ВЫПАДАЮЩИХ МЕНЮ (FIXED OVERLAY)
-// ==========================================
 function positionDropdown(triggerBtn, dropdownEl) {
     if (!triggerBtn || !dropdownEl) return;
     const rect = triggerBtn.getBoundingClientRect();
@@ -1849,7 +2569,6 @@ function positionDropdown(triggerBtn, dropdownEl) {
     dropdownEl.style.top = `${Math.round(top)}px`;
 }
 
-// Экспорт
 function openExportDropdown() {
     closeImportDropdown();
     positionDropdown(btnExportMenu, exportDropdown);
@@ -1872,7 +2591,6 @@ btnExportMenu.onclick = (e) => {
     }
 };
 
-// Импорт
 function openImportDropdown() {
     closeExportDropdown();
     positionDropdown(btnImportMenu, importDropdown);
@@ -1930,7 +2648,7 @@ if (toolbarEl) {
 document.getElementById('btn-save-json').onclick = () => {
     closeExportDropdown();
     const data = JSON.stringify({
-        version: 8,
+        version: 11,
         nodes: state.nodes,
         groups: state.groups,
         edges: state.edges,
@@ -1954,14 +2672,7 @@ document.getElementById('json-file-input').onchange = (e) => {
         try {
             const parsed = JSON.parse(event.target.result);
             if (Array.isArray(parsed.nodes) && Array.isArray(parsed.edges)) {
-                state.nodes = parsed.nodes;
-                state.groups = parsed.groups || [];
-                state.edges = parsed.edges;
-                state.pan = parsed.pan || { x: 0, y: 0 };
-                state.scale = parsed.scale || 1;
-                applyTheme(parsed.theme || 'light');
-                updateTransform();
-                render();
+                applyNewState(parsed);
                 scheduleSave();
             } else {
                 alert('Неверный формат JSON топологии');
@@ -1982,31 +2693,57 @@ document.getElementById('btn-open-import').onclick = () => {
 document.getElementById('btn-cancel-import').onclick = () => modal.classList.remove('active');
 
 document.getElementById('btn-run-import').onclick = () => {
-    const text = document.getElementById('import-text').value.trim();
-    if (!text) return modal.classList.remove('active');
+    const rawText = document.getElementById('import-text').value.trim();
+    if (!rawText) return modal.classList.remove('active');
 
-    const lines = text.split('\n');
+    const rawLines = rawText.split('\n').map(l => l.trim()).filter(Boolean);
+    if (rawLines.length < 2) {
+        alert('Ошибка импорта: CSV должен содержать как минимум строку заголовков и одну строку данных.');
+        return;
+    }
+
+    const delim = rawLines[0].includes(';') ? ';' : ',';
+    const headerParts = rawLines[0].split(delim).map(h => h.trim().toLowerCase().replace(/[\s\-]/g, '_'));
+
+    const colMap = {
+        src_ip: headerParts.findIndex(h => h === 'src_ip' || h === 'src' || h === 'source_ip'),
+        dst_ip: headerParts.findIndex(h => h === 'dst_ip' || h === 'dst' || h === 'dest_ip' || h === 'destination_ip'),
+        src_port: headerParts.findIndex(h => h === 'src_port' || h === 'sport' || h === 'source_port'),
+        dst_port: headerParts.findIndex(h => h === 'dst_port' || h === 'port' || h === 'dport' || h === 'dest_port'),
+        src_phys: headerParts.findIndex(h => h === 'src_physical_port' || h === 'src_phys' || h === 'src_interface' || h === 'src_iface'),
+        dst_phys: headerParts.findIndex(h => h === 'dst_physical_port' || h === 'dst_phys' || h === 'dst_interface' || h === 'dst_iface'),
+        flow: headerParts.findIndex(h => h === 'comment' || h === 'flow' || h === 'desc' || h === 'description')
+    };
+
+    if (colMap.src_ip === -1 || colMap.dst_ip === -1) {
+        alert('Ошибка: заголовок CSV обязан содержать поля src_ip и dst_ip');
+        return;
+    }
+
     const parsedRules = [];
     const distinctIps = new Set();
     const ipInDegree = new Map();
     const ipOutDegree = new Map();
 
-    lines.forEach(line => {
-        const parts = line.split(';').map(p => p.trim());
-        if (parts.length >= 2 && parts[0] && parts[1]) {
-            const srcIp = parts[0];
-            const dstIp = parts[1];
-            const port = parts[2] || '';
-            const flow = parts[3] || '';
+    for (let i = 1; i < rawLines.length; i++) {
+        const parts = rawLines[i].split(delim).map(p => p.trim());
+        const srcIp = parts[colMap.src_ip] || '';
+        const dstIp = parts[colMap.dst_ip] || '';
+        if (!srcIp || !dstIp) continue;
 
-            parsedRules.push({ srcIp, dstIp, port, flow });
-            distinctIps.add(srcIp);
-            distinctIps.add(dstIp);
+        const srcPort = colMap.src_port !== -1 ? (parts[colMap.src_port] || '') : '';
+        const dstPort = colMap.dst_port !== -1 ? (parts[colMap.dst_port] || '') : '';
+        const srcPhys = colMap.src_phys !== -1 ? (parts[colMap.src_phys] || '') : '';
+        const dstPhys = colMap.dst_phys !== -1 ? (parts[colMap.dst_phys] || '') : '';
+        const flow = colMap.flow !== -1 ? (parts[colMap.flow] || '') : '';
 
-            ipOutDegree.set(srcIp, (ipOutDegree.get(srcIp) || 0) + 1);
-            ipInDegree.set(dstIp, (ipInDegree.get(dstIp) || 0) + 1);
-        }
-    });
+        parsedRules.push({ srcIp, dstIp, srcPort, dstPort, srcPhys, dstPhys, flow });
+        distinctIps.add(srcIp);
+        distinctIps.add(dstIp);
+
+        ipOutDegree.set(srcIp, (ipOutDegree.get(srcIp) || 0) + 1);
+        ipInDegree.set(dstIp, (ipInDegree.get(dstIp) || 0) + 1);
+    }
 
     if (parsedRules.length === 0) return modal.classList.remove('active');
 
@@ -2100,15 +2837,21 @@ document.getElementById('btn-run-import').onclick = () => {
         const dstNode = resolvedNodes.get(rule.dstIp);
         if (srcNode && dstNode) {
             const isIdentical = state.edges.some(
-                e => e.from === srcNode.id && e.to === dstNode.id && e.port === rule.port && e.flow === rule.flow
+                e => e.from === srcNode.id && e.to === dstNode.id && e.port === rule.dstPort && e.srcPort === rule.srcPort && e.flow === rule.flow
             );
             if (!isIdentical) {
                 state.edges.push({
                     id: uid(),
                     from: srcNode.id,
                     to: dstNode.id,
-                    port: rule.port,
-                    flow: rule.flow
+                    type: 'arrow',
+                    port: rule.dstPort,
+                    srcPort: rule.srcPort,
+                    srcPhysicalPort: rule.srcPhys,
+                    dstPhysicalPort: rule.dstPhys,
+                    flow: rule.flow,
+                    points: [],
+                    labelT: 0.5
                 });
             }
         }
@@ -2132,9 +2875,6 @@ function downloadBlob(content, filename, contentType) {
     URL.revokeObjectURL(url);
 }
 
-// ==========================================
-// ГЕНЕРАТОР SVG СТРОКИ (ОБЩИЙ ДЛЯ SVG И PNG)
-// ==========================================
 function generateSvgExportString() {
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     state.groups.forEach(g => {
@@ -2186,15 +2926,21 @@ function generateSvgExportString() {
             if (!actualFn || !actualTn) return;
 
             const effectiveIdx = (edge.from === baseFromId) ? idx : (edges.length - 1 - idx);
-            const geom = calculateEdgeGeometry(actualFn, actualTn, effectiveIdx, edges.length);
+            const labelT = typeof edge.labelT === 'number' ? edge.labelT : 0.5;
+            const geom = getPolylinePoints(actualFn, actualTn, edge.points, effectiveIdx, edges.length, labelT);
             if (!geom) return;
 
-            svg += `<path d="${geom.pathData}" fill="none" stroke="${edgeCol}" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#svg-arrow)" />\n`;
-            const lbl = `${edge.port ? '[' + edge.port + '] ' : ''}${edge.flow || ''}`.trim();
+            const markerAttr = (edge.type !== 'line') ? 'marker-end="url(#svg-arrow)"' : '';
+            svg += `<path d="${geom.pathData}" fill="none" stroke="${edgeCol}" stroke-width="2" stroke-dasharray="6,4" ${markerAttr} />\n`;
+
+            const lbl = formatEdgeLabel(edge);
             if (lbl) {
                 const tw = Math.max(50, Math.ceil(lbl.length * 7.8) + 16);
-                svg += `<rect x="${geom.labelX - tw/2}" y="${geom.labelY - 10}" width="${tw}" height="20" rx="4" fill="${nodeCol}" stroke="#cbd5e1" />\n`;
-                svg += `<text x="${geom.labelX}" y="${geom.labelY + 4}" fill="${textCol}" font-family="monospace" font-size="10" text-anchor="middle">${escapeHtml(lbl)}</text>\n`;
+                const lx = geom.labelX;
+                const ly = geom.labelY;
+
+                svg += `<rect x="${lx - tw/2}" y="${ly - 10}" width="${tw}" height="${20}" rx="4" fill="${nodeCol}" stroke="#cbd5e1" />\n`;
+                svg += `<text x="${lx}" y="${ly + 4}" fill="${textCol}" font-family="monospace" font-size="10" text-anchor="middle">${escapeHtml(lbl)}</text>\n`;
             }
         });
     });
@@ -2209,11 +2955,11 @@ function generateSvgExportString() {
 
         if (n.type === 'Server') {
             svg += `<g transform="translate(${n.x + 8}, ${n.y + 7})" stroke="${strokeColor}" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="0" y="0" width="14" height="6" rx="1"/>
-                <rect x="0" y="8" width="14" height="6" rx="1"/>
-                <circle cx="3" cy="3" r="0.5" fill="${strokeColor}"/>
-                <circle cx="3" cy="11" r="0.5" fill="${strokeColor}"/>
-            </g>\n`;
+        <rect x="0" y="0" width="14" height="6" rx="1"/>
+        <rect x="0" y="8" width="14" height="6" rx="1"/>
+        <circle cx="3" cy="3" r="0.5" fill="${strokeColor}"/>
+        <circle cx="3" cy="11" r="0.5" fill="${strokeColor}"/>
+      </g>\n`;
             svg += `<text x="${n.x + 26}" y="${n.y + 18}" fill="${textCol}" font-family="monospace" font-size="11">${escapeHtml(n.ip || n.name)}</text>\n`;
         } else {
             svg += `<text x="${n.x + 8}" y="${n.y + 18}" fill="${textCol}" font-family="monospace" font-size="11">${icon} ${escapeHtml(n.ip || n.name)}</text>\n`;
@@ -2231,9 +2977,6 @@ document.getElementById('btn-export-svg').onclick = () => {
     downloadBlob(result.svg, 'topology.svg', 'image/svg+xml');
 };
 
-// ==========================================
-// ЭКСПОРТ В PNG ЧЕРЕЗ CANVAS (HiDPI / Retina 2x)
-// ==========================================
 document.getElementById('btn-export-png').onclick = () => {
     closeExportDropdown();
     const result = generateSvgExportString();
@@ -2244,7 +2987,7 @@ document.getElementById('btn-export-png').onclick = () => {
     const img = new Image();
 
     img.onload = () => {
-        const scaleFactor = 2; // Ретина-качество
+        const scaleFactor = 2;
         const canvas = document.createElement('canvas');
         canvas.width = result.width * scaleFactor;
         canvas.height = result.height * scaleFactor;
@@ -2281,8 +3024,8 @@ document.getElementById('btn-export-png').onclick = () => {
 document.getElementById('btn-export-drawio').onclick = () => {
     closeExportDropdown();
     let cells = `
-        <mxCell id="0" />
-        <mxCell id="1" parent="0" />`;
+  <mxCell id="0" />
+  <mxCell id="1" parent="0" />`;
 
     const isDark = state.theme === 'dark';
     const bgCol = isDark ? '#0b1120' : '#f8fafc';
@@ -2309,14 +3052,14 @@ document.getElementById('btn-export-drawio').onclick = () => {
 
         const style = `swimlane;whiteSpace=wrap;html=1;dashed=${g.collapsed ? 0 : 1};fillColor=${nodeCol};strokeColor=${col};fontColor=${col};startSize=26;rounded=1;arcSize=8;`;
         cells += `
-        <mxCell id="${g.id}" value="${escapeHtml(g.name)}" style="${style}" vertex="1" parent="${parentId}">
-          <mxGeometry x="${relX}" y="${relY}" width="${g.width}" height="${gh}" as="geometry" />
-        </mxCell>`;
+    <mxCell id="${g.id}" value="${escapeHtml(g.name)}" style="${style}" vertex="1" parent="${parentId}">
+      <mxGeometry x="${relX}" y="${relY}" width="${g.width}" height="${gh}" as="geometry" />
+    </mxCell>`;
     });
 
     state.nodes.forEach(n => {
         const box = getNodeBox(n);
-        const iconSymbol = n.type === 'Server' ? '🖴' : getNodeIcon(n.type);
+        const iconSymbol = n.type === 'Server' ? '🖥' : getNodeIcon(n.type);
         const lbl = `${iconSymbol} ${escapeHtml(n.ip || n.name)}`;
         const stroke = n.type === 'Malicious' ? '#ef4444' : '#0284c7';
         const parentId = n.groupId ? n.groupId : '1';
@@ -2333,9 +3076,9 @@ document.getElementById('btn-export-drawio').onclick = () => {
 
         const style = `rounded=1;whiteSpace=wrap;html=1;fillColor=${nodeCol};strokeColor=${stroke};fontColor=${textCol};fontFamily=monospace;fontSize=11;`;
         cells += `
-        <mxCell id="${n.id}" value="${lbl}" style="${style}" vertex="1" parent="${parentId}">
-          <mxGeometry x="${relX}" y="${relY}" width="${box.w}" height="${box.h}" as="geometry" />
-        </mxCell>`;
+    <mxCell id="${n.id}" value="${lbl}" style="${style}" vertex="1" parent="${parentId}">
+      <mxGeometry x="${relX}" y="${relY}" width="${box.w}" height="${box.h}" as="geometry" />
+    </mxCell>`;
     });
 
     const pairMap = new Map();
@@ -2347,15 +3090,16 @@ document.getElementById('btn-export-drawio').onclick = () => {
 
     pairMap.forEach(edges => {
         edges.forEach((e, idx) => {
-            const lbl = `${e.port ? '[' + escapeHtml(e.port) + ']&#xa;' : ''}${escapeHtml(e.flow || '')}`;
+            const lbl = formatEdgeLabel(e);
             const exitY = edges.length === 1 ? 0.5 : (idx + 1) / (edges.length + 1);
             const entryY = exitY;
-            const style = `edgeStyle=orthogonalEdgeStyle;curved=1;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=${edgeCol};fontColor=${textCol};labelBackgroundColor=${nodeCol};endArrow=block;endFill=1;exitX=1;exitY=${exitY};entryX=0;entryY=${entryY};`;
+            const endArrowStyle = (e.type === 'line') ? 'endArrow=none;' : 'endArrow=block;endFill=1;';
+            const style = `edgeStyle=orthogonalEdgeStyle;curved=1;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=${edgeCol};fontColor=${textCol};labelBackgroundColor=${nodeCol};${endArrowStyle}exitX=1;exitY=${exitY};entryX=0;entryY=${entryY};`;
 
             cells += `
-          <mxCell id="${e.id}" value="${lbl}" style="${style}" edge="1" parent="1" source="${e.from}" target="${e.to}">
-            <mxGeometry relative="1" as="geometry" />
-          </mxCell>`;
+      <mxCell id="${e.id}" value="${escapeHtml(lbl)}" style="${style}" edge="1" parent="1" source="${e.from}" target="${e.to}">
+        <mxGeometry relative="1" as="geometry" />
+      </mxCell>`;
         });
     });
 
@@ -2389,7 +3133,7 @@ function getTouchCenter(t1, t2) {
 
 container.addEventListener('touchstart', (e) => {
     if (e.touches.length === 1) {
-        if (e.target === container || e.target === viewport || e.target === edgesLayer) {
+        if (e.target === container || e.target === viewport || e.target === edgesLayer || e.target === edgeHandlesLayer) {
             state.isPanning = true;
             state.startPan = {
                 x: e.touches[0].clientX - state.pan.x,
@@ -2495,7 +3239,7 @@ async function decompressHashToState(hashStr) {
 
 document.getElementById('btn-share-url').onclick = async () => {
     const payload = {
-        version: 8,
+        version: 11,
         nodes: state.nodes,
         groups: state.groups,
         edges: state.edges,
@@ -2516,8 +3260,7 @@ document.getElementById('btn-share-url').onclick = async () => {
                 `⚠️ Схема слишком большая для ссылки (${kbSize} КБ при безопасном лимите ~2 КБ).\n\n` +
                 `• «ОК» — скачать файл JSON для надёжной передачи.\n` +
                 `• «Отмена» — Всё равно скопировать ссылку в буфер обмена.\n\n` +
-                `* Длинная ссылка может обрезаться в мессенджерах или почте.\n` +
-                `** Её можно сжать через URL shortener, но это раскроет данные стороннему сервису.`
+                `* Длинная ссылка может обрезаться в мессенджерах или почте.`
             );
 
             if (shouldSaveJson) {
@@ -2551,7 +3294,15 @@ function applyNewState(newState) {
 
     state.nodes = newState.nodes || [];
     state.groups = newState.groups || [];
-    state.edges = newState.edges || [];
+    state.edges = (newState.edges || []).map(e => ({
+        ...e,
+        type: e.type || 'arrow',
+        srcPort: e.srcPort || '',
+        srcPhysicalPort: e.srcPhysicalPort || '',
+        dstPhysicalPort: e.dstPhysicalPort || '',
+        points: normalizePoints(e),
+        labelT: typeof e.labelT === 'number' ? e.labelT : 0.5
+    }));
     state.pan = newState.pan || { x: 0, y: 0 };
     state.scale = newState.scale || 1;
 
@@ -2593,8 +3344,3 @@ async function startApp() {
 }
 
 startApp();
-
-
-
-
-// 2600
