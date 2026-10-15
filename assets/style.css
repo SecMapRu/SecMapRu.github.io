@@ -63,7 +63,6 @@ body {
     display: flex;
 }
 
-/* Вертикальный тулбар слева: жестко заблокирован горизонтальный скролл */
 #toolbar {
     position: absolute;
     top: 12px;
@@ -81,7 +80,7 @@ body {
     gap: 6px;
     box-shadow: 0 4px 15px rgba(0,0,0,0.08);
     overflow-y: auto;
-    overflow-x: hidden !important; /* Убирает горизонтальный скролл тулбара */
+    overflow-x: hidden !important;
     overscroll-behavior-x: none;
 }
 
@@ -103,7 +102,7 @@ body {
     box-sizing: border-box;
     white-space: nowrap;
     position: relative;
-    overflow: hidden; /* Гарантирует отсутствие распирания кнопки */
+    overflow: hidden;
 }
 
 .btn .btn-text {
@@ -168,7 +167,7 @@ body {
 }
 
 .dropdown-menu {
-    position: fixed; /* Полная отвязка от контекста тулбара */
+    position: fixed;
     width: 250px;
     background: var(--dropdown-bg);
     border: 1px solid var(--border);
@@ -244,7 +243,6 @@ body {
     margin: 3px 0;
 }
 
-/* Органичная верхняя плашка описания */
 #top-info-banner {
     position: absolute;
     top: 12px;
@@ -306,7 +304,6 @@ body {
     overflow: visible;
 }
 
-/* Рамка множественного выделения (Marquee) */
 #selection-box {
     position: absolute;
     display: none;
@@ -317,7 +314,6 @@ body {
     z-index: 70;
 }
 
-/* Группы */
 .group-element {
     position: absolute;
     border: 2px dashed var(--group-color, var(--group-border));
@@ -377,7 +373,7 @@ body.theme-dark .collapse-btn { background: rgba(255,255,255,0.12); color: #fff;
 .resizer.r-ne::after { right: 2px; top: 2px; }
 .resizer.r-nw::after { left: 2px; top: 2px; }
 
-/* SVG-слой связей */
+
 svg#edges-layer {
     position: absolute;
     top: 0;
@@ -436,7 +432,6 @@ body.disable-flow .edge-flow-particles { display: none !important; }
     pointer-events: none;
 }
 
-/* Ноды */
 .node-element {
     position: absolute;
     background: var(--node-bg);
@@ -544,7 +539,6 @@ body.disable-flow .edge-flow-particles { display: none !important; }
     white-space: nowrap;
 }
 
-/* Сайдбар */
 #sidebar {
     position: absolute;
     top: 68px;
@@ -727,6 +721,37 @@ body.disable-flow .edge-flow-particles { display: none !important; }
     cursor: move;
 }
 
+.edge-segment-handle {
+    position: absolute;
+    height: 14px;
+    transform-origin: 0 50%;
+    cursor: grab;
+    pointer-events: auto;
+    z-index: 26;
+    background: transparent;
+}
+.edge-segment-handle::after {
+    content: "";
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    top: 5px;
+    height: 4px;
+    border-radius: 2px;
+    background: #f59e0b;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+.edge-segment-handle:hover::after {
+    opacity: 0.75;
+}
+.edge-segment-handle:active {
+    cursor: grabbing;
+}
+.edge-segment-handle:active::after {
+    opacity: 1;
+}
+
 /* ==========================================
    АДАПТИВНОСТЬ ДЛЯ МОБИЛЬНЫХ УСТРОЙСТВ
    ========================================== */
@@ -762,7 +787,6 @@ body.disable-flow .edge-flow-particles { display: none !important; }
         display: none !important;
     }
 
-    /* Мобильный дропдаун */
     .dropdown-menu {
         width: 210px;
         box-shadow: 0 8px 30px rgba(0,0,0,0.35);

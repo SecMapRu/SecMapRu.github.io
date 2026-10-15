@@ -63,6 +63,80 @@ function renderSnapGuides(guides) {
     });
 }
 
+// Функция выравнивания точки под углы, кратные 45° и 90°, относительно опорной точки (refPt)
+function snapPointToAngles(x, y, refPt, forceConstraint = false) {
+    if (!refPt) return { x, y, snapped: false };
+
+    const dx = x - refPt.x;
+    const dy = y - refPt.y;
+    const dist = Math.hypot(dx, dy);
+
+    // Если курсор слишком близко к опорной точке, не привязываем
+    if (dist < 8) return { x, y, snapped: false };
+
+    // Угол в радианах и градусах (-180° .. 180°)
+    const angleRad = Math.atan2(dy, dx);
+    let angleDeg = angleRad * (180 / Math.PI);
+    if (angleDeg < 0) angleDeg += 360;
+
+    // Ближайший угол кратный 45° (0, 45, 90, 135, 180, 225, 270, 315)
+    const step = 45;
+    const nearestAngleDeg = Math.round(angleDeg / step) * step;
+    const angleDiff = Math.abs(angleDeg - nearestAngleDeg);
+
+    // Допуск захвата: при зажатом Shift принудительно, иначе при отклонении до 6 градусов или 12px
+    const snapThresholdDeg = 6.5;
+    const linearError = dist * Math.sin(angleDiff * (Math.PI / 180));
+
+    if (forceConstraint || angleDiff <= snapThresholdDeg || linearError <= 12) {
+        const targetRad = (nearestAngleDeg % 360) * (Math.PI / 180);
+        return {
+            x: Math.round(refPt.x + Math.cos(targetRad) * dist),
+            y: Math.round(refPt.y + Math.sin(targetRad) * dist),
+            snapped: true,
+            refPt: refPt,
+            angle: nearestAngleDeg % 360
+        };
+    }
+
+    return { x, y, snapped: false };
+}
+
+// Функция сдвига точек изгибов для связей, у которых изменились координаты концов
+function adjustEdgePointsOnNodesMove(nodeDeltas) {
+    if (!nodeDeltas || nodeDeltas.size === 0) return;
+
+    state.edges.forEach(edge => {
+        if (!Array.isArray(edge.points) || edge.points.length === 0) return;
+
+        const deltaFrom = nodeDeltas.get(edge.from);
+        const deltaTo = nodeDeltas.get(edge.to);
+
+        // Случай 1: оба конца связи сместились (например, перенесли пару связанных хостов)
+        if (deltaFrom && deltaTo) {
+            const avgDx = Math.round((deltaFrom.dx + deltaTo.dx) / 2);
+            const avgDy = Math.round((deltaFrom.dy + deltaTo.dy) / 2);
+            edge.points.forEach(pt => {
+                pt.x += avgDx;
+                pt.y += avgDy;
+            });
+        }
+        // Случай 2: сместился только один конец (сдвигаем точки пропорционально их удаленности)
+        else if (deltaFrom || deltaTo) {
+            const activeDelta = deltaFrom || deltaTo;
+            const isFrom = !!deltaFrom;
+            const totalPts = edge.points.length;
+
+            edge.points.forEach((pt, idx) => {
+                // Коэффициент влияния: чем ближе точка к двигающемуся хосту, тем сильнее сдвиг
+                const ratio = isFrom ? (totalPts - idx) / (totalPts + 1) : (idx + 1) / (totalPts + 1);
+                pt.x += Math.round(activeDelta.dx * ratio);
+                pt.y += Math.round(activeDelta.dy * ratio);
+            });
+        }
+    });
+}
+
 const sidebar = document.getElementById('sidebar');
 const sidebarContent = document.getElementById('sidebar-content');
 const sidebarTitle = document.getElementById('sidebar-title');
@@ -381,21 +455,48 @@ function updateTransform() {
     }
 }
 
-container.addEventListener('wheel', (e) => {
-    e.preventDefault();
-    const zoomFactor = 1.1;
-    const mouseX = e.clientX - container.offsetLeft;
-    const mouseY = e.clientY - container.offsetTop;
+function zoomToPoint(targetScale, screenX, screenY) {
     const prevScale = state.scale;
+    const clampedScale = Math.min(3, Math.max(0.2, targetScale));
 
-    if (e.deltaY < 0) state.scale = Math.min(3, state.scale * zoomFactor);
-    else state.scale = Math.max(0.2, state.scale / zoomFactor);
+    // Если масштаб не изменился (уперлись в лимит 0.2x или 3x) — ничего не сдвигаем
+    if (Math.abs(clampedScale - prevScale) < 0.0001) return;
 
-    state.pan.x = mouseX - (mouseX - state.pan.x) * (state.scale / prevScale);
-    state.pan.y = mouseY - (mouseY - state.pan.y) * (state.scale / prevScale);
+    const rect = container.getBoundingClientRect();
+    const pivotX = screenX - rect.left;
+    const pivotY = screenY - rect.top;
+
+    // Смещаем pan так, чтобы точка под курсором/центром осталась на том же месте
+    state.pan.x = pivotX - (pivotX - state.pan.x) * (clampedScale / prevScale);
+    state.pan.y = pivotY - (pivotY - state.pan.y) * (clampedScale / prevScale);
+    state.scale = clampedScale;
+
     updateTransform();
     scheduleSave();
+}
+
+container.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const zoomFactor = 1.15;
+    const nextScale = e.deltaY < 0 ? state.scale * zoomFactor : state.scale / zoomFactor;
+    zoomToPoint(nextScale, e.clientX, e.clientY);
 }, { passive: false });
+
+// container.addEventListener('wheel', (e) => {
+//     e.preventDefault();
+//     const zoomFactor = 1.1;
+//     const mouseX = e.clientX - container.offsetLeft;
+//     const mouseY = e.clientY - container.offsetTop;
+//     const prevScale = state.scale;
+//
+//     if (e.deltaY < 0) state.scale = Math.min(3, state.scale * zoomFactor);
+//     else state.scale = Math.max(0.2, state.scale / zoomFactor);
+//
+//     state.pan.x = mouseX - (mouseX - state.pan.x) * (state.scale / prevScale);
+//     state.pan.y = mouseY - (mouseY - state.pan.y) * (state.scale / prevScale);
+//     updateTransform();
+//     scheduleSave();
+// }, { passive: false });
 
 container.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;
@@ -1125,9 +1226,143 @@ function distToSegment(px, py, x1, y1, x2, y2) {
     return Math.hypot(px - (x1 + t * (x2 - x1)), py - (y1 + t * (y2 - y1)));
 }
 
-// Баг 1: если связь уже искривлена, точка искривления теперь позиционируется строго на ней
 function renderMultiBendHandles(edge, geom) {
-    if (!Array.isArray(edge.points) || edge.points.length === 0) {
+    if (!geom || !geom.fullCoords || geom.fullCoords.length < 2) return;
+
+    const showAngleGuide = (p1, p2) => {
+        if (!p1 || !p2) return;
+        const dx = p2.x - p1.x;
+        const dy = p2.y - p1.y;
+        const len = Math.hypot(dx, dy) || 1;
+        const ext = 80;
+        renderSnapGuides([{
+            x1: p1.x - (dx / len) * 20,
+            y1: p1.y - (dy / len) * 20,
+            x2: p2.x + (dx / len) * ext,
+            y2: p2.y + (dy / len) * ext
+        }]);
+    };
+
+    if (!Array.isArray(edge.points)) edge.points = [];
+
+    // сдвиг в стороны + ДВОЙНОЙ КЛИК для новой точки
+    for (let i = 0; i < geom.fullCoords.length - 1; i++) {
+        const p1 = geom.fullCoords[i];
+        const p2 = geom.fullCoords[i + 1];
+
+        const segDx = p2.x - p1.x;
+        const segDy = p2.y - p1.y;
+        const segLen = Math.hypot(segDx, segDy);
+        if (segLen < 15) continue;
+
+        const angleRad = Math.atan2(segDy, segDx);
+        const deg = angleRad * (180 / Math.PI);
+
+        const segEl = document.createElement('div');
+        segEl.className = 'edge-segment-handle';
+        segEl.style.left = p1.x + 'px';
+        segEl.style.top = (p1.y - 7) + 'px';
+        segEl.style.width = segLen + 'px';
+        segEl.style.transform = `rotate(${deg}deg)`;
+        segEl.title = 'Потяните для сдвига линии | 2x клик — добавить точку изгиба';
+
+        const absDeg = Math.abs(deg) % 180;
+        if (absDeg <= 25 || absDeg >= 155) {
+            segEl.style.cursor = 'ns-resize';
+        } else if (absDeg >= 65 && absDeg <= 115) {
+            segEl.style.cursor = 'ew-resize';
+        } else {
+            segEl.style.cursor = 'move';
+        }
+
+        segEl.addEventListener('dblclick', (e) => {
+            e.stopPropagation();
+            addBendPointToEdge(edge, e.clientX, e.clientY, geom.fullCoords);
+        });
+
+        let isDraggingSeg = false;
+        let startClientX, startClientY;
+        let initPt1, initPt2;
+        let p1Index, p2Index;
+
+        segEl.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return;
+            e.stopPropagation();
+            isDraggingSeg = true;
+            startClientX = e.clientX;
+            startClientY = e.clientY;
+
+            // Если двигаем промежуточный сегмент между двумя уже существующими изломами
+            if (i > 0 && i < geom.fullCoords.length - 2) {
+                p1Index = i - 1;
+                p2Index = i;
+                initPt1 = { ...edge.points[p1Index] };
+                initPt2 = { ...edge.points[p2Index] };
+            } else {
+                // Если двигаем отрезок у хоста или всю прямую связь:
+                const newPtA = { id: uid(), x: Math.round(p1.x), y: Math.round(p1.y) };
+                const newPtB = { id: uid(), x: Math.round(p2.x), y: Math.round(p2.y) };
+
+                if (i === 0) {
+                    edge.points.unshift(newPtA, newPtB);
+                    p1Index = 0;
+                    p2Index = 1;
+                } else {
+                    edge.points.push(newPtA, newPtB);
+                    p1Index = edge.points.length - 2;
+                    p2Index = edge.points.length - 1;
+                }
+
+                initPt1 = { ...newPtA };
+                initPt2 = { ...newPtB };
+            }
+
+            const onSegMove = (ev) => {
+                if (!isDraggingSeg) return;
+                const totalDx = (ev.clientX - startClientX) / state.scale;
+                const totalDy = (ev.clientY - startClientY) / state.scale;
+
+                let applyDx = totalDx;
+                let applyDy = totalDy;
+
+                if (absDeg <= 20 || absDeg >= 160) {
+                    applyDx = 0;
+                } else if (absDeg >= 70 && absDeg <= 110) {
+                    applyDy = 0;
+                } else {
+                    const normalX = -Math.sin(angleRad);
+                    const normalY = Math.cos(angleRad);
+                    const proj = totalDx * normalX + totalDy * normalY;
+                    applyDx = proj * normalX;
+                    applyDy = proj * normalY;
+                }
+
+                edge.points[p1Index].x = Math.round(initPt1.x + applyDx);
+                edge.points[p1Index].y = Math.round(initPt1.y + applyDy);
+                edge.points[p2Index].x = Math.round(initPt2.x + applyDx);
+                edge.points[p2Index].y = Math.round(initPt2.y + applyDy);
+
+                renderEdges();
+            };
+
+            const onSegUp = () => {
+                if (isDraggingSeg) {
+                    isDraggingSeg = false;
+                    scheduleSave();
+                }
+                window.removeEventListener('mousemove', onSegMove);
+                window.removeEventListener('mouseup', onSegUp);
+            };
+
+            window.addEventListener('mousemove', onSegMove);
+            window.addEventListener('mouseup', onSegUp);
+        });
+
+        edgeHandlesLayer.appendChild(segEl);
+    }
+
+    // если точек изгиба еще нет
+    if (edge.points.length === 0) {
         const autoPt = (geom.pts && geom.pts.length > 0) ? geom.pts[0] : null;
         const midX = autoPt ? autoPt.x : (geom.pStart.x + geom.pEnd.x) / 2;
         const midY = autoPt ? autoPt.y : (geom.pStart.y + geom.pEnd.y) / 2;
@@ -1136,53 +1371,69 @@ function renderMultiBendHandles(edge, geom) {
         addHandle.className = 'edge-bend-handle edge-add-bend-handle';
         addHandle.style.left = midX + 'px';
         addHandle.style.top = midY + 'px';
-        addHandle.title = 'Потяните или кликните дважды по линии, чтобы добавить точку изгиба';
+        addHandle.title = 'Потяните, чтобы создать точку изгиба (Shift — фиксация 45°/90°)';
 
-        let isDragging = false;
+        let isDraggingAdd = false;
         let startX, startY;
 
         addHandle.addEventListener('mousedown', (e) => {
             if (e.button !== 0) return;
             e.stopPropagation();
-            isDragging = true;
+            isDraggingAdd = true;
             startX = e.clientX;
             startY = e.clientY;
 
             const newPoint = { id: uid(), x: Math.round(midX), y: Math.round(midY) };
             edge.points = [newPoint];
 
-            const onMove = (ev) => {
-                if (!isDragging) return;
+            const onAddMove = (ev) => {
+                if (!isDraggingAdd) return;
                 const dx = (ev.clientX - startX) / state.scale;
                 const dy = (ev.clientY - startY) / state.scale;
-                newPoint.x = Math.round(midX + dx);
-                newPoint.y = Math.round(midY + dy);
+                const rawX = Math.round(midX + dx);
+                const rawY = Math.round(midY + dy);
+
+                const distToStart = Math.hypot(rawX - geom.pStart.x, rawY - geom.pStart.y);
+                const distToEnd = Math.hypot(rawX - geom.pEnd.x, rawY - geom.pEnd.y);
+                const primaryRef = distToStart <= distToEnd ? geom.pStart : geom.pEnd;
+
+                const snap = snapPointToAngles(rawX, rawY, primaryRef, ev.shiftKey);
+                newPoint.x = snap.x;
+                newPoint.y = snap.y;
+
+                if (snap.snapped) {
+                    showAngleGuide(snap.refPt, newPoint);
+                } else {
+                    clearSnapGuides();
+                }
+
                 renderEdges();
             };
 
-            const onUp = () => {
-                if (isDragging) {
-                    isDragging = false;
+            const onAddUp = () => {
+                if (isDraggingAdd) {
+                    isDraggingAdd = false;
+                    clearSnapGuides();
                     scheduleSave();
                 }
-                window.removeEventListener('mousemove', onMove);
-                window.removeEventListener('mouseup', onUp);
+                window.removeEventListener('mousemove', onAddMove);
+                window.removeEventListener('mouseup', onAddUp);
             };
 
-            window.addEventListener('mousemove', onMove);
-            window.addEventListener('mouseup', onUp);
+            window.addEventListener('mousemove', onAddMove);
+            window.addEventListener('mouseup', onAddUp);
         });
 
         edgeHandlesLayer.appendChild(addHandle);
-        return;
     }
 
+    // перемещение вершин угла с snap 45/90
     edge.points.forEach((pt, pIdx) => {
         const handle = document.createElement('div');
         handle.className = 'edge-bend-handle';
         handle.style.left = pt.x + 'px';
         handle.style.top = pt.y + 'px';
-        handle.title = `Точка изгиба #${pIdx + 1} (двойной клик — удалить)`;
+        handle.title = `Точка изгиба #${pIdx + 1} (Shift — фиксация 45°/90°, 2x клик — удалить)`;
 
         let isDragging = false;
         let startX, startY;
@@ -1198,18 +1449,41 @@ function renderMultiBendHandles(edge, geom) {
             initialX = pt.x;
             initialY = pt.y;
 
+            const prevPoint = pIdx === 0 ? geom.pStart : edge.points[pIdx - 1];
+            const nextPoint = pIdx === edge.points.length - 1 ? geom.pEnd : edge.points[pIdx + 1];
+
             const onMove = (ev) => {
                 if (!isDragging) return;
                 const dx = (ev.clientX - startX) / state.scale;
                 const dy = (ev.clientY - startY) / state.scale;
-                pt.x = Math.round(initialX + dx);
-                pt.y = Math.round(initialY + dy);
+                const rawX = Math.round(initialX + dx);
+                const rawY = Math.round(initialY + dy);
+
+                const dPrev = prevPoint ? Math.hypot(rawX - prevPoint.x, rawY - prevPoint.y) : Infinity;
+                const dNext = nextPoint ? Math.hypot(rawX - nextPoint.x, rawY - nextPoint.y) : Infinity;
+
+                let snap = snapPointToAngles(rawX, rawY, dPrev <= dNext ? prevPoint : nextPoint, ev.shiftKey);
+                if (!snap.snapped && !ev.shiftKey) {
+                    const altRef = dPrev <= dNext ? nextPoint : prevPoint;
+                    if (altRef) snap = snapPointToAngles(rawX, rawY, altRef, false);
+                }
+
+                pt.x = snap.x;
+                pt.y = snap.y;
+
+                if (snap.snapped) {
+                    showAngleGuide(snap.refPt, pt);
+                } else {
+                    clearSnapGuides();
+                }
+
                 renderEdges();
             };
 
             const onUp = () => {
                 if (isDragging) {
                     isDragging = false;
+                    clearSnapGuides();
                     scheduleSave();
                 }
                 window.removeEventListener('mousemove', onMove);
@@ -1223,6 +1497,7 @@ function renderMultiBendHandles(edge, geom) {
         handle.addEventListener('dblclick', (e) => {
             e.stopPropagation();
             edge.points.splice(pIdx, 1);
+            clearSnapGuides();
             renderEdges();
             scheduleSave();
         });
@@ -1976,12 +2251,40 @@ function renderSingleNodeSidebar(id) {
     document.getElementById('prop-name').oninput = (e) => { node.name = e.target.value; syncNodesDOM(); scheduleSave(); };
     document.getElementById('prop-ip').oninput = (e) => { node.ip = e.target.value; syncNodesDOM(); scheduleSave(); };
     document.getElementById('prop-group').onchange = (e) => {
-        node.groupId = e.target.value || null;
-        if (node.groupId) {
-            const clamped = clampWithinParentGroup(node.x, node.y, 95, 28, node.groupId);
-            node.x = clamped.x;
-            node.y = clamped.y;
+        const oldX = node.x;
+        const oldY = node.y;
+
+        const targetGroupId = e.target.value || null;
+        node.groupId = targetGroupId;
+
+        if (targetGroupId) {
+            const targetGroup = state.groups.find(g => g.id === targetGroupId);
+            if (targetGroup) {
+                // Проверяем, находится ли хост уже внутри группы
+                const insideX = node.x >= targetGroup.x + 8 && node.x <= targetGroup.x + targetGroup.width - 100;
+                const insideY = node.y >= targetGroup.y + 36 && node.y <= targetGroup.y + targetGroup.height - 36;
+
+                // Если хост был снаружи — перемещаем его в свободную область группы
+                if (!insideX || !insideY) {
+                    node.x = Math.round(targetGroup.x + 20);
+                    node.y = Math.round(targetGroup.y + 48);
+                } else {
+                    const clamped = clampWithinParentGroup(node.x, node.y, 95, 28, node.groupId);
+                    node.x = clamped.x;
+                    node.y = clamped.y;
+                }
+            }
         }
+
+        const dx = node.x - oldX;
+        const dy = node.y - oldY;
+
+        if (dx !== 0 || dy !== 0) {
+            const deltas = new Map();
+            deltas.set(node.id, { dx, dy });
+            adjustEdgePointsOnNodesMove(deltas);
+        }
+
         render();
         scheduleSave();
     };
@@ -2125,10 +2428,72 @@ function renderSingleGroupSidebar(id) {
     document.getElementById('prop-gname').oninput = (e) => { group.name = e.target.value; render(); scheduleSave(); };
     document.getElementById('prop-gcolor').oninput = (e) => { group.color = e.target.value; render(); scheduleSave(); };
     document.getElementById('prop-gparent').onchange = (e) => {
-        group.parentGroupId = e.target.value || null;
-        if (group.parentGroupId) {
-            clampGroupWithinParent(group, group.parentGroupId);
+        const newParentId = e.target.value || null;
+        group.parentGroupId = newParentId;
+
+        if (newParentId) {
+            const parent = state.groups.find(p => p.id === newParentId);
+            if (parent) {
+                const oldX = group.x;
+                const oldY = group.y;
+
+                // Проверяем, находится ли перемещаемая группа уже внутри границ новой родительской группы
+                const insideX = group.x >= parent.x + 8 && (group.x + group.width) <= (parent.x + parent.width - 8);
+                const insideY = group.y >= parent.y + 36 && (group.y + (group.collapsed ? 36 : group.height)) <= (parent.y + parent.height - 8);
+
+                let targetX = group.x;
+                let targetY = group.y;
+
+                if (!insideX || !insideY) {
+                    // Если группа была снаружи — переносим её внутрь родительской группы с сохранением размеров
+                    targetX = parent.x + 16;
+                    targetY = parent.y + 44;
+
+                    // Если группа шире родителя, адаптируем ширину
+                    if (targetX + group.width > parent.x + parent.width - 8) {
+                        group.width = Math.max(160, parent.width - 32);
+                    }
+                    if (targetY + group.height > parent.y + parent.height - 8) {
+                        group.height = Math.max(100, parent.height - 52);
+                    }
+                }
+
+                // Корректируем итоговые координаты
+                clampGroupWithinParent(group, newParentId);
+
+                const dx = group.x - oldX;
+                const dy = group.y - oldY;
+
+                // Если группа сместилась — рекурсивно передвигаем ВСЕ её дочерние хосты и подгруппы
+                if (dx !== 0 || dy !== 0) {
+                    const movedNodeDeltas = new Map();
+
+                    // Рекурсивный сбор всех смещенных узлов для переноса изгибов связей
+                    const collectDeltas = (gid) => {
+                        state.nodes.forEach(n => {
+                            if (n.groupId === gid) {
+                                movedNodeDeltas.set(n.id, { dx, dy });
+                            }
+                        });
+                        state.groups.forEach(cg => {
+                            if (cg.parentGroupId === gid) {
+                                collectDeltas(cg.id);
+                            }
+                        });
+                    };
+                    collectDeltas(group.id);
+
+                    // Сдвигаем элементы группы в DOM и в модели данных
+                    moveGroupRecursively(group.id, dx, dy);
+
+                    // Сдвигаем точки изгибов связей, которые двигались вместе с узлами
+                    if (typeof adjustEdgePointsOnNodesMove === 'function') {
+                        adjustEdgePointsOnNodesMove(movedNodeDeltas);
+                    }
+                }
+            }
         }
+
         render();
         scheduleSave();
     };
@@ -2186,8 +2551,8 @@ function renderMultiSelectSidebar(counts) {
       <div style="margin: 8px 0;">
         <label style="font-size:11px; font-weight:600; color:var(--text-muted); display:block; margin-bottom:4px;">Выравнивание хостов:</label>
         <div style="display:flex; gap:6px;">
-          <button class="btn" id="btn-align-h" style="flex:1;">⚖️ По горизонтали [Alt+H]</button>
-          <button class="btn" id="btn-align-v" style="flex:1;">⚖️ По вертикали [Alt+V]</button>
+          <button class="btn" id="btn-align-h" style="flex:1;">По горизонтали [Alt+H]</button>
+          <button class="btn" id="btn-align-v" style="flex:1;">По вертикали [Alt+V]</button>
         </div>
       </div>
     `;
@@ -2227,17 +2592,87 @@ function renderMultiSelectSidebar(counts) {
             if (!val) return;
             const targetGroupId = (val === '__ROOT__') ? null : val;
 
-            state.selectedNodes.forEach(nid => {
-                const node = state.nodes.find(n => n.id === nid);
-                if (node) {
-                    node.groupId = targetGroupId;
-                    if (targetGroupId) {
-                        const clamped = clampWithinParentGroup(node.x, node.y, 95, 28, targetGroupId);
-                        node.x = clamped.x;
-                        node.y = clamped.y;
-                    }
+            const selectedNodesList = Array.from(state.selectedNodes)
+                .map(nid => state.nodes.find(n => n.id === nid))
+                .filter(Boolean);
+
+            if (selectedNodesList.length === 0) return;
+
+            const nodeDeltas = new Map();
+
+            if (!targetGroupId) {
+                // Возврат в корень: группа сбрасывается, координаты остаются прежними
+                selectedNodesList.forEach(n => {
+                    n.groupId = null;
+                });
+            } else {
+                const targetGroup = state.groups.find(g => g.id === targetGroupId);
+                if (!targetGroup) return;
+
+                // 1. Вычисляем текущий габаритный прямоугольник выбранных хостов
+                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                selectedNodesList.forEach(n => {
+                    minX = Math.min(minX, n.x);
+                    minY = Math.min(minY, n.y);
+                    maxX = Math.max(maxX, n.x + 110);
+                    maxY = Math.max(maxY, n.y + 28);
+                });
+
+                const clusterW = maxX - minX;
+                const clusterH = maxY - minY;
+
+                // Допустимая внутренняя область целевой группы
+                const innerGroupX = targetGroup.x + 16;
+                const innerGroupY = targetGroup.y + 44;
+                const innerGroupW = Math.max(100, targetGroup.width - 32);
+                const innerGroupH = Math.max(60, (targetGroup.collapsed ? 36 : targetGroup.height) - 52);
+
+                // Если кластер хостов уже находится внутри границ целевой группы — не двигаем их принудительно
+                const alreadyInside = (minX >= targetGroup.x && maxX <= targetGroup.x + targetGroup.width &&
+                    minY >= targetGroup.y + 36 && maxY <= targetGroup.y + targetGroup.height);
+
+                let shiftX = 0;
+                let shiftY = 0;
+
+                if (!alreadyInside) {
+                    // Смещаем кластер целиком внутрь группы (центрируем или ставим в левый верхний угол)
+                    const targetStartX = innerGroupW > clusterW
+                        ? Math.round(innerGroupX + (innerGroupW - clusterW) / 2)
+                        : innerGroupX;
+                    const targetStartY = innerGroupH > clusterH
+                        ? Math.round(innerGroupY + (innerGroupH - clusterH) / 2)
+                        : innerGroupY;
+
+                    shiftX = targetStartX - minX;
+                    shiftY = targetStartY - minY;
                 }
-            });
+
+                // 2. Применяем смещение ко всем хостам, сохраняя их относительное положение
+                selectedNodesList.forEach(node => {
+                    const oldX = node.x;
+                    const oldY = node.y;
+
+                    node.groupId = targetGroupId;
+                    node.x = Math.round(oldX + shiftX);
+                    node.y = Math.round(oldY + shiftY);
+
+                    // Если хост немного вылез за границы (например, кластер шире группы),
+                    // аккуратно подгоняем его
+                    const clamped = clampWithinParentGroup(node.x, node.y, 95, 28, targetGroupId);
+                    node.x = clamped.x;
+                    node.y = clamped.y;
+
+                    const dx = node.x - oldX;
+                    const dy = node.y - oldY;
+                    if (dx !== 0 || dy !== 0) {
+                        nodeDeltas.set(node.id, { dx, dy });
+                    }
+                });
+            }
+
+            // Перемещаем точки изгибов связей вслед за хостами
+            adjustEdgePointsOnNodesMove(nodeDeltas);
+
             render();
             scheduleSave();
             batchGroupSelect.value = '';
@@ -2360,27 +2795,59 @@ document.getElementById('btn-clear-all').onclick = () => {
 };
 
 function zoomIn() {
-    state.scale = Math.min(3, state.scale * 1.2);
-    updateTransform();
-    scheduleSave();
+    const rect = container.getBoundingClientRect();
+    zoomToPoint(state.scale * 1.25, rect.left + rect.width / 2, rect.top + rect.height / 2);
 }
 
 function zoomOut() {
-    state.scale = Math.max(0.2, state.scale / 1.2);
-    updateTransform();
-    scheduleSave();
+    const rect = container.getBoundingClientRect();
+    zoomToPoint(state.scale / 1.25, rect.left + rect.width / 2, rect.top + rect.height / 2);
 }
 
 function zoomReset() {
-    const prevScale = state.scale;
-    const targetScale = 1;
+    const rect = container.getBoundingClientRect();
+    zoomToPoint(1, rect.left + rect.width / 2, rect.top + rect.height / 2);
+}
 
-    const centerX = container.clientWidth / 2;
-    const centerY = container.clientHeight / 2;
+function fitViewToContent() {
+    if (state.nodes.length === 0 && state.groups.length === 0) {
+        state.pan = { x: 0, y: 0 };
+        state.scale = 1;
+        updateTransform();
+        return;
+    }
 
-    state.pan.x = centerX - (centerX - state.pan.x) * (targetScale / prevScale);
-    state.pan.y = centerY - (centerY - state.pan.y) * (targetScale / prevScale);
-    state.scale = targetScale;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+    state.nodes.forEach(n => {
+        const box = getNodeBox(n);
+        minX = Math.min(minX, box.x);
+        minY = Math.min(minY, box.y);
+        maxX = Math.max(maxX, box.x + box.w);
+        maxY = Math.max(maxY, box.y + box.h);
+    });
+
+    state.groups.forEach(g => {
+        const gh = g.collapsed ? 36 : g.height;
+        minX = Math.min(minX, g.x);
+        minY = Math.min(minY, g.y);
+        maxX = Math.max(maxX, g.x + g.width);
+        maxY = Math.max(maxY, g.y + gh);
+    });
+
+    const padding = 60;
+    const contentW = (maxX - minX) + padding * 2;
+    const contentH = (maxY - minY) + padding * 2;
+    const containerW = container.clientWidth || window.innerWidth;
+    const containerH = container.clientHeight || window.innerHeight;
+
+    const fitScale = Math.min(1.5, Math.max(0.2, Math.min(containerW / contentW, containerH / contentH)));
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+
+    state.scale = fitScale;
+    state.pan.x = Math.round(containerW / 2 - centerX * fitScale);
+    state.pan.y = Math.round(containerH / 2 - centerY * fitScale);
 
     updateTransform();
     scheduleSave();
@@ -2389,6 +2856,7 @@ function zoomReset() {
 document.getElementById('btn-zoom-in').onclick = zoomIn;
 document.getElementById('btn-zoom-out').onclick = zoomOut;
 document.getElementById('btn-zoom-reset').onclick = zoomReset;
+document.getElementById('btn-zoom-reset').ondblclick = fitViewToContent;
 
 function selectAllItems() {
     state.selectedNodes.clear();
@@ -2727,15 +3195,28 @@ document.getElementById('btn-run-import').onclick = () => {
 
     for (let i = 1; i < rawLines.length; i++) {
         const parts = rawLines[i].split(delim).map(p => p.trim());
-        const srcIp = parts[colMap.src_ip] || '';
-        const dstIp = parts[colMap.dst_ip] || '';
+        let srcIp = parts[colMap.src_ip] || '';
+        let dstIp = parts[colMap.dst_ip] || '';
         if (!srcIp || !dstIp) continue;
 
-        const srcPort = colMap.src_port !== -1 ? (parts[colMap.src_port] || '') : '';
-        const dstPort = colMap.dst_port !== -1 ? (parts[colMap.dst_port] || '') : '';
+        let srcPort = colMap.src_port !== -1 ? (parts[colMap.src_port] || '') : '';
+        let dstPort = colMap.dst_port !== -1 ? (parts[colMap.dst_port] || '') : '';
         const srcPhys = colMap.src_phys !== -1 ? (parts[colMap.src_phys] || '') : '';
         const dstPhys = colMap.dst_phys !== -1 ? (parts[colMap.dst_phys] || '') : '';
         const flow = colMap.flow !== -1 ? (parts[colMap.flow] || '') : '';
+
+        // Автоматическое извлечение порта, если передано в формате IP:PORT
+        if (srcIp.includes(':')) {
+            const [cleanIp, extractedPort] = srcIp.split(':');
+            srcIp = cleanIp.trim();
+            if (!srcPort) srcPort = extractedPort.trim();
+        }
+
+        if (dstIp.includes(':')) {
+            const [cleanIp, extractedPort] = dstIp.split(':');
+            dstIp = cleanIp.trim();
+            if (!dstPort) dstPort = extractedPort.trim();
+        }
 
         parsedRules.push({ srcIp, dstIp, srcPort, dstPort, srcPhys, dstPhys, flow });
         distinctIps.add(srcIp);
@@ -2751,7 +3232,7 @@ document.getElementById('btn-run-import').onclick = () => {
     const importGroup = {
         id: importGroupId,
         parentGroupId: null,
-        name: 'Импорт (' + new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}) + ')',
+        name: 'Импорт (' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ')',
         color: '#0284c7',
         x: 200,
         y: 120,
@@ -2857,6 +3338,16 @@ document.getElementById('btn-run-import').onclick = () => {
         }
     });
 
+    // Центрирование камеры на созданной группе
+    const canvasW = container.clientWidth || window.innerWidth;
+    const canvasH = container.clientHeight || window.innerHeight;
+    const groupCenterX = importGroup.x + importGroup.width / 2;
+    const groupCenterY = importGroup.y + importGroup.height / 2;
+
+    state.pan.x = Math.round(canvasW / 2 - groupCenterX * state.scale);
+    state.pan.y = Math.round(canvasH / 2 - groupCenterY * state.scale);
+    updateTransform();
+
     modal.classList.remove('active');
     selectItem('group', importGroupId, false);
     render();
@@ -2877,21 +3368,66 @@ function downloadBlob(content, filename, contentType) {
 
 function generateSvgExportString() {
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+    // 1. Учитываем группы
     state.groups.forEach(g => {
-        minX = Math.min(minX, g.x); minY = Math.min(minY, g.y);
-        maxX = Math.max(maxX, g.x + g.width); maxY = Math.max(maxY, g.y + (g.collapsed ? 36 : g.height));
+        const gh = g.collapsed ? 36 : g.height;
+        minX = Math.min(minX, g.x);
+        minY = Math.min(minY, g.y);
+        maxX = Math.max(maxX, g.x + g.width);
+        maxY = Math.max(maxY, g.y + gh);
     });
+
+    // 2. Учитываем хосты (с запасом на тень и возможные значки)
     state.nodes.forEach(n => {
+        if (isGroupEffectivelyCollapsed(n.groupId)) return;
         const box = getNodeBox(n);
-        minX = Math.min(minX, box.x); minY = Math.min(minY, box.y);
-        maxX = Math.max(maxX, box.x + box.w + 15); maxY = Math.max(maxY, box.y + box.h + 8);
+        minX = Math.min(minX, box.x);
+        minY = Math.min(minY, box.y);
+        maxX = Math.max(maxX, box.x + box.w);
+        maxY = Math.max(maxY, box.y + box.h);
     });
+
+    // 3. Учитываем связи, точки изгибов и их текстовые плашки
+    state.edges.forEach(e => {
+        const fn = state.nodes.find(n => n.id === e.from);
+        const tn = state.nodes.find(n => n.id === e.to);
+        if (!fn || !tn) return;
+
+        // Сами точки изгиба
+        if (Array.isArray(e.points)) {
+            e.points.forEach(pt => {
+                minX = Math.min(minX, pt.x);
+                minY = Math.min(minY, pt.y);
+                maxX = Math.max(maxX, pt.x);
+                maxY = Math.max(maxY, pt.y);
+            });
+        }
+
+        // Положение и габариты текста подписи на связи
+        const geom = getPolylinePoints(fn, tn, e.points, 0, 1, typeof e.labelT === 'number' ? e.labelT : 0.5);
+        if (geom) {
+            const lbl = formatEdgeLabel(e);
+            if (lbl) {
+                const tw = Math.max(50, Math.ceil(lbl.length * 7.8) + 16);
+                const halfW = tw / 2;
+                minX = Math.min(minX, geom.labelX - halfW);
+                minY = Math.min(minY, geom.labelY - 12);
+                maxX = Math.max(maxX, geom.labelX + halfW);
+                maxY = Math.max(maxY, geom.labelY + 12);
+            }
+        }
+    });
+
+    // Если карта пуста
     if (minX === Infinity) return null;
 
-    const p = 40;
-    minX -= p; minY -= p;
-    const w = (maxX - minX) + p * 2;
-    const h = (maxY - minY) + p * 2;
+    // Увеличенный безопасный отступ по краям (padding), чтобы стрелки и тени не обрезались
+    const p = 60;
+    minX = Math.round(minX - p);
+    minY = Math.round(minY - p);
+    const w = Math.round((maxX - minX) + p);
+    const h = Math.round((maxY - minY) + p);
 
     const isDark = state.theme === 'dark';
     const bgCol = isDark ? '#0b1120' : '#f8fafc';
@@ -2906,8 +3442,8 @@ function generateSvgExportString() {
     sortedGroups.forEach(g => {
         const gh = g.collapsed ? 36 : g.height;
         const col = /^#[0-9a-fA-F]{3,8}$/.test(g.color) ? g.color : '#0284c7';
-        svg += `<rect x="${g.x}" y="${g.y}" width="${g.width}" height="${gh}" rx="8" fill="${hexToRgba(col, 0.06)}" stroke="${col}" stroke-dasharray="${g.collapsed?'0':'4,4'}" />\n`;
-        svg += `<text x="${g.x+10}" y="${g.y+22}" fill="${col}" font-family="sans-serif" font-size="12" font-weight="bold">${escapeHtml(g.name)} ${g.collapsed?'(свернуто)':''}</text>\n`;
+        svg += `<rect x="${g.x}" y="${g.y}" width="${g.width}" height="${gh}" rx="8" fill="${hexToRgba(col, 0.06)}" stroke="${col}" stroke-dasharray="${g.collapsed ? '0' : '4,4'}" />\n`;
+        svg += `<text x="${g.x + 10}" y="${g.y + 22}" fill="${col}" font-family="sans-serif" font-size="12" font-weight="bold">${escapeHtml(g.name)} ${g.collapsed ? '(свернуто)' : ''}</text>\n`;
     });
 
     const pairMap = new Map();
@@ -2939,7 +3475,7 @@ function generateSvgExportString() {
                 const lx = geom.labelX;
                 const ly = geom.labelY;
 
-                svg += `<rect x="${lx - tw/2}" y="${ly - 10}" width="${tw}" height="${20}" rx="4" fill="${nodeCol}" stroke="#cbd5e1" />\n`;
+                svg += `<rect x="${lx - tw / 2}" y="${ly - 10}" width="${tw}" height="${20}" rx="4" fill="${nodeCol}" stroke="#cbd5e1" />\n`;
                 svg += `<text x="${lx}" y="${ly + 4}" fill="${textCol}" font-family="monospace" font-size="10" text-anchor="middle">${escapeHtml(lbl)}</text>\n`;
             }
         });
