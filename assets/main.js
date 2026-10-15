@@ -482,22 +482,6 @@ container.addEventListener('wheel', (e) => {
     zoomToPoint(nextScale, e.clientX, e.clientY);
 }, { passive: false });
 
-// container.addEventListener('wheel', (e) => {
-//     e.preventDefault();
-//     const zoomFactor = 1.1;
-//     const mouseX = e.clientX - container.offsetLeft;
-//     const mouseY = e.clientY - container.offsetTop;
-//     const prevScale = state.scale;
-//
-//     if (e.deltaY < 0) state.scale = Math.min(3, state.scale * zoomFactor);
-//     else state.scale = Math.max(0.2, state.scale / zoomFactor);
-//
-//     state.pan.x = mouseX - (mouseX - state.pan.x) * (state.scale / prevScale);
-//     state.pan.y = mouseY - (mouseY - state.pan.y) * (state.scale / prevScale);
-//     updateTransform();
-//     scheduleSave();
-// }, { passive: false });
-
 container.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;
     const isTargetCanvas = (e.target === container || e.target === viewport || e.target === edgesLayer || e.target === edgeHandlesLayer);
